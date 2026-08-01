@@ -14,7 +14,6 @@ use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Ai\Attributes\Temperature;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\HasStructuredOutput;
-use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\Promptable;
 
 #[Temperature(0.7)]
@@ -108,15 +107,6 @@ class PostContentGenerator implements Agent, HasStructuredOutput
             'image_body' => $schema->string()->description('1-2 short sentences (max 25 words) overlaid below the image_title. Expands the hook just enough to compel reading the caption.')->required(),
             'image_keywords' => $schema->array()->items($schema->string())->description('2-4 search keywords for Unsplash for the single image.')->required(),
         ];
-    }
-
-    public function provider(): Lab
-    {
-        return match (config('ai.default')) {
-            'openai' => Lab::OpenAI,
-            'anthropic' => Lab::Anthropic,
-            default => Lab::Gemini,
-        };
     }
 
     public function model(): string

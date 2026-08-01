@@ -10,8 +10,10 @@ use Illuminate\Support\Facades\Http;
 
 beforeEach(function () {
     // Run tests without LLM credentials so the deterministic fallback is exercised.
-    config()->set('services.gemini.api_key', '');
-    config()->set('services.openai.api_key', '');
+    config()->set('ai.providers.gemini.key', '');
+    config()->set('ai.providers.openai.key', '');
+    config()->set('ai.providers.openrouter.key', '');
+    config()->set('ai.providers.anthropic.key', '');
 
     $this->autofill = fn (string $url) => app(AutofillBrand::class)($url);
 });
@@ -354,7 +356,7 @@ test('throws when upstream site returns an error', function () {
 });
 
 test('when llm is configured, polishes description/tone/language/voice_notes via BrandAnalyzer', function () {
-    config()->set('services.gemini.api_key', 'fake-key');
+    config()->set('ai.providers.gemini.key', 'fake-key');
     config()->set('ai.default', 'gemini');
 
     Http::fake([
@@ -390,8 +392,38 @@ test('when llm is configured, polishes description/tone/language/voice_notes via
     expect($result->toArray()['brand_voice_traits'])->toBe(['third_person', 'direct', 'no_hype']);
 });
 
+test('openrouter as default text provider enables BrandAnalyzer', function () {
+    config()->set('ai.default', 'openrouter');
+    config()->set('ai.providers.openrouter.key', 'sk-or-v1-test');
+
+    Http::fake([
+        'example.com' => Http::response(<<<'HTML'
+            <html lang="en">
+            <head>
+              <title>OpenRouter Co</title>
+              <meta name="description" content="Terse blurb.">
+            </head>
+            <body><main><p>OpenRouter Co ships AI through one key.</p></main></body>
+            </html>
+        HTML, 200),
+    ]);
+
+    BrandAnalyzer::fake([
+        [
+            'description' => 'OpenRouter Co ships AI through one key.',
+            'language' => 'en',
+            'voice_traits' => ['third_person', 'direct'],
+        ],
+    ]);
+
+    $result = ($this->autofill)('https://example.com');
+
+    expect($result->description)->toBe('OpenRouter Co ships AI through one key.');
+    expect($result->toArray()['brand_voice_traits'])->toBe(['third_person', 'direct']);
+});
+
 test('LLM language detection wins and carries any supported language, not just en/es/pt-BR', function () {
-    config()->set('services.gemini.api_key', 'fake-key');
+    config()->set('ai.providers.gemini.key', 'fake-key');
     config()->set('ai.default', 'gemini');
 
     // The <html lang> declares "en", so the deterministic extractor yields 'en'.
@@ -448,7 +480,7 @@ test('when llm is not configured, falls back to meta tags only', function () {
 });
 
 test('falls back to meta tags when BrandAnalyzer throws', function () {
-    config()->set('services.gemini.api_key', 'fake-key');
+    config()->set('ai.providers.gemini.key', 'fake-key');
     config()->set('ai.default', 'gemini');
 
     Http::fake([

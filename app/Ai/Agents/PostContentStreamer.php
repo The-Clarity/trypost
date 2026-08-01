@@ -8,7 +8,6 @@ use App\Enums\Ai\GeneratorFormat;
 use App\Models\Workspace;
 use Laravel\Ai\Attributes\Temperature;
 use Laravel\Ai\Contracts\Agent;
-use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\Promptable;
 
 /**
@@ -40,15 +39,6 @@ class PostContentStreamer implements Agent
             'format' => GeneratorFormat::Single->value,
             'slide_count' => 1,
         ])->render();
-    }
-
-    public function provider(): Lab
-    {
-        return match (config('ai.default')) {
-            'openai' => Lab::OpenAI,
-            'anthropic' => Lab::Anthropic,
-            default => Lab::Gemini,
-        };
     }
 
     public function model(): string

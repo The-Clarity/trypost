@@ -9,7 +9,6 @@ use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Ai\Attributes\Temperature;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\HasStructuredOutput;
-use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\Promptable;
 
 #[Temperature(0.2)]
@@ -42,15 +41,6 @@ class PostContentReviewer implements Agent, HasStructuredOutput
                 ->description('Up to 8 grammar/spelling/clarity suggestions. Empty array if the text is fine.')
                 ->required(),
         ];
-    }
-
-    public function provider(): Lab
-    {
-        return match (config('ai.default')) {
-            'openai' => Lab::OpenAI,
-            'anthropic' => Lab::Anthropic,
-            default => Lab::Gemini,
-        };
     }
 
     public function model(): string

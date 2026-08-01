@@ -9,7 +9,6 @@ use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Ai\Attributes\Temperature;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\HasStructuredOutput;
-use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\Promptable;
 
 #[Temperature(0.25)]
@@ -46,15 +45,6 @@ class PostImageRegenerator implements Agent, HasStructuredOutput
                 ->description('Set to image_only (change visual only), text_only (change text only), or both (change visual and text).')
                 ->required(),
         ];
-    }
-
-    public function provider(): Lab
-    {
-        return match (config('ai.default')) {
-            'openai' => Lab::OpenAI,
-            'anthropic' => Lab::Anthropic,
-            default => Lab::Gemini,
-        };
     }
 
     public function model(): string

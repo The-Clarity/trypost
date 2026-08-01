@@ -567,7 +567,7 @@ test('autofillBrand is always allowed even without a subscription', function () 
 
 test('autofillBrand never records AI usage even when the LLM runs', function () {
     config(['trypost.self_hosted' => false]);
-    config()->set('services.gemini.api_key', 'fake-key');
+    config()->set('ai.providers.gemini.key', 'fake-key');
     config()->set('ai.default', 'gemini');
 
     Http::fake([

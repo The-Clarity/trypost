@@ -9,6 +9,7 @@ use App\Http\Resources\App\HandleInertiaRequests\AuthAccountResource;
 use App\Http\Resources\App\HandleInertiaRequests\AuthPlanResource;
 use App\Http\Resources\App\HandleInertiaRequests\AuthUserResource;
 use App\Http\Resources\App\HandleInertiaRequests\AuthWorkspaceResource;
+use App\Support\AiConfiguration;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -57,7 +58,7 @@ class HandleInertiaRequests extends Middleware
                 'code' => $code,
                 'name' => $name,
             ])->values()->all(),
-            'aiEnabled' => ! empty(config('services.gemini.api_key')) || ! empty(config('services.openai.api_key')),
+            'aiEnabled' => AiConfiguration::isTextProviderConfigured(),
             'selfHosted' => $isSelfHosted,
             'googleAuthEnabled' => config('trypost.google_auth_enabled'),
             'githubAuthEnabled' => config('trypost.github_auth_enabled'),

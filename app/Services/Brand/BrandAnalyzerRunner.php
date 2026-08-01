@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Brand;
 
 use App\Ai\Agents\BrandAnalyzer;
+use App\Support\AiConfiguration;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use League\HTMLToMarkdown\HtmlConverter;
@@ -16,11 +17,7 @@ final class BrandAnalyzerRunner
 
     public function isAvailable(): bool
     {
-        return match (config('ai.default')) {
-            'openai' => ! empty(config('services.openai.api_key')),
-            'gemini' => ! empty(config('services.gemini.api_key')),
-            default => false,
-        };
+        return AiConfiguration::isTextProviderConfigured();
     }
 
     public function analyze(string $bodyHtml): ?LlmBrandAnalysis
