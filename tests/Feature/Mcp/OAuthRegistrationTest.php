@@ -59,18 +59,42 @@ test('mcp oauth consent view is available for workspace viewers', function () {
         ],
         'user' => $viewer,
         'workspace' => $workspace,
-        'scopes' => collect([(object) ['description' => 'Use MCP server']]),
+        'scopes' => collect([(object) ['id' => 'mcp:use', 'description' => 'Use MCP server']]),
         'authToken' => 'test-auth-token',
         'request' => request(),
     ])->render();
 
     expect($html)
-        ->toContain('Authorize Viewer Agent')
+        ->toContain(__('mcp.authorize_heading', ['client' => 'Viewer Agent']))
         ->toContain($viewer->email)
         ->toContain($workspace->name)
-        ->toContain('only access this workspace')
+        ->toContain(__('mcp.authorize_workspace_scope'))
+        ->toContain(__('mcp.scope_mcp_use'))
         ->and(view()->exists('mcp.authorize-denied'))->toBeFalse()
         ->and(class_exists(EnsureCanAuthorizeMcp::class))->toBeFalse();
+});
+
+test('mcp oauth consent view uses the active locale', function () {
+    app()->setLocale('pt-BR');
+
+    $html = view('mcp.authorize', [
+        'client' => (object) [
+            'id' => (string) Str::uuid(),
+            'name' => 'Claude',
+        ],
+        'user' => (object) ['email' => 'user@example.com'],
+        'workspace' => (object) ['name' => 'Acme'],
+        'scopes' => collect([(object) ['id' => 'mcp:use', 'description' => 'Use MCP server']]),
+        'authToken' => 'test-auth-token',
+        'request' => request(),
+    ])->render();
+
+    expect($html)
+        ->toContain('Autorizar Claude')
+        ->toContain('Conectado como:')
+        ->toContain('Esta conexão terá acesso somente a este workspace.')
+        ->toContain('Autorizar')
+        ->toContain('Cancelar');
 });
 
 test('passport approve route has no mcp create-post role gate', function () {
