@@ -577,6 +577,7 @@ return [
         'account_token_expired' => 'Sessão da conta social expirou — reconecte a conta',
         'platform_unavailable' => 'A plataforma está temporariamente indisponível. Vamos tentar de novo em breve.',
         'platform_unavailable_exhausted' => 'A plataforma continuou indisponível após várias tentativas. Tente de novo mais tarde.',
+        'publishing_timed_out' => 'A publicação excedeu o tempo limite. Tente novamente.',
     ],
 
     'delete' => [

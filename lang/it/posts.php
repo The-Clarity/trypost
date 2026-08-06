@@ -577,6 +577,7 @@ return [
         'account_token_expired' => 'Sessione dell\'account social scaduta — ricollegalo',
         'platform_unavailable' => 'La piattaforma è temporaneamente non disponibile. Riproveremo a breve.',
         'platform_unavailable_exhausted' => 'La piattaforma è rimasta non disponibile dopo diversi tentativi. Riprova più tardi.',
+        'publishing_timed_out' => 'Pubblicazione scaduta. Riprova.',
     ],
 
     'delete' => [

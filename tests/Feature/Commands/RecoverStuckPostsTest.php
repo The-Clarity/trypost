@@ -42,7 +42,7 @@ test('it recovers posts stuck in publishing for over 1 hour', function () {
     $post->refresh();
 
     expect($platform->status)->toBe(PlatformStatus::Failed);
-    expect($platform->error_message)->toBe('Publishing timed out. Please try again.');
+    expect($platform->error_message)->toBe(__('posts.errors.publishing_timed_out'));
     expect($post->status)->toBe(PostStatus::Failed);
 });
 
@@ -128,6 +128,6 @@ test('it recovers platforms stuck in retrying for over 1 hour', function () {
     $post->refresh();
 
     expect($platform->status)->toBe(PlatformStatus::Failed)
-        ->and($platform->error_message)->toBe('Publishing timed out. Please try again.')
+        ->and($platform->error_message)->toBe(__('posts.errors.publishing_timed_out'))
         ->and($post->status)->toBe(PostStatus::Failed);
 });

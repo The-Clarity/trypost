@@ -579,6 +579,7 @@ return [
         'account_token_expired' => 'Sitzung des Social-Media-Kontos abgelaufen – bitte erneut verbinden',
         'platform_unavailable' => 'Die Plattform ist vorübergehend nicht verfügbar. Wir versuchen es in Kürze erneut.',
         'platform_unavailable_exhausted' => 'Die Plattform blieb nach mehreren Versuchen nicht verfügbar. Bitte später erneut versuchen.',
+        'publishing_timed_out' => 'Die Veröffentlichung ist abgelaufen. Bitte erneut versuchen.',
     ],
 
     'delete' => [

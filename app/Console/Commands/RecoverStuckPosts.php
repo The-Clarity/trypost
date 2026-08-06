@@ -30,7 +30,7 @@ class RecoverStuckPosts extends Command
                     ->where('updated_at', '<=', now()->subHour())
                     ->update([
                         'status' => PlatformStatus::Failed,
-                        'error_message' => 'Publishing timed out. Please try again.',
+                        'error_message' => __('posts.errors.publishing_timed_out'),
                         'error_context' => json_encode([
                             'category' => 'timeout',
                             'failed_at' => now()->toIso8601String(),

@@ -341,7 +341,10 @@ class PinterestPublisher
                     'status_code' => $response->status(),
                     'body' => $this->redactResponseBody($response->body()),
                 ]);
-                Sleep::for($pollSeconds)->seconds();
+
+                if ($i < $maxAttempts - 1) {
+                    Sleep::for($pollSeconds)->seconds();
+                }
 
                 continue;
             }
@@ -363,7 +366,9 @@ class PinterestPublisher
                 );
             }
 
-            Sleep::for($pollSeconds)->seconds();
+            if ($i < $maxAttempts - 1) {
+                Sleep::for($pollSeconds)->seconds();
+            }
         }
 
         Log::warning('Pinterest media processing timeout', [

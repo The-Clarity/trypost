@@ -1054,7 +1054,7 @@ test('pinterest publisher treats video processing timeout as platform unavailabl
         ->toThrow(PlatformUnavailableException::class, 'Pinterest media processing timeout after 60 attempts');
 
     Http::assertNotSent(fn ($request) => str_contains($request->url(), '/v5/pins'));
-    Sleep::assertSleptTimes(60);
+    Sleep::assertSleptTimes(59);
 });
 
 test('pinterest publisher fails hard when video processing reports failed', function () {
