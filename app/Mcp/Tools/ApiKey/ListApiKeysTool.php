@@ -33,12 +33,12 @@ class ListApiKeysTool extends Tool
             return $workspace;
         }
 
-        // Filtering by workspace_id excludes OAuth-flow tokens (whose
-        // workspace_id is null and resolved at request time via
-        // LoadWorkspaceFromToken middleware).
+        // Personal access API keys only — workspace-bound MCP OAuth grants must
+        // not appear here or be revocable via this tool.
         $tokens = AccessToken::where('user_id', $request->user()->id)
             ->where('workspace_id', $workspace->id)
             ->where('revoked', false)
+            ->personalAccessApiKey()
             ->latest()
             ->get();
 

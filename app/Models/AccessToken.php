@@ -232,7 +232,8 @@ class AccessToken extends Token
             return false;
         }
 
-        $workspace ??= $this->workspace ?? $user->currentWorkspace;
+        // Bound grants resolve only from the token — never the switcher.
+        $workspace ??= $this->workspace;
 
         return $workspace instanceof Workspace
             && $user->can('view', $workspace);

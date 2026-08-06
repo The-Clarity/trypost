@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Providers;
 
+use App\Listeners\BindWorkspaceToAccessToken;
 use App\Listeners\StripeEventListener;
 use App\Models\AccessToken;
 use App\Models\Account;
@@ -29,6 +30,8 @@ use App\Models\Workspace;
 use App\Models\WorkspaceInvite;
 use App\Models\WorkspaceLabel;
 use App\Models\WorkspaceSignature;
+use App\Passport\AuthCode;
+use App\Passport\AuthCodeRepository;
 use App\Services\PostHogService;
 use App\Services\PostTemplate\Registry as PostTemplateRegistry;
 use App\Socialite\DiscordProvider;
@@ -53,6 +56,8 @@ use Laravel\Cashier\Cashier;
 use Laravel\Cashier\Events\WebhookReceived;
 use Laravel\Nightwatch\Facades\Nightwatch;
 use Laravel\Nightwatch\Records\CacheEvent;
+use Laravel\Passport\Bridge\AuthCodeRepository as PassportAuthCodeRepository;
+use Laravel\Passport\Events\AccessTokenCreated;
 use Laravel\Passport\Passport;
 use Laravel\Socialite\Facades\Socialite;
 use Laravel\Socialite\Two\GoogleProvider;
@@ -71,6 +76,8 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->singleton(PostTemplateRegistry::class);
+
+        $this->app->bind(PassportAuthCodeRepository::class, AuthCodeRepository::class);
 
         if ($this->app->environment('local') && class_exists(\Laravel\Telescope\TelescopeServiceProvider::class)) {
             $this->app->register(\Laravel\Telescope\TelescopeServiceProvider::class);
@@ -101,6 +108,7 @@ class AppServiceProvider extends ServiceProvider
     protected function configurePassport(): void
     {
         Passport::useTokenModel(AccessToken::class);
+        Passport::useAuthCodeModel(AuthCode::class);
 
         // API keys may omit an application expiry ("never"). Passport still
         // embeds a JWT `exp`, so keep that far ahead and enforce optional
@@ -111,7 +119,16 @@ class AppServiceProvider extends ServiceProvider
             'mcp:use' => 'Use MCP server',
         ]);
 
-        Passport::authorizationView('mcp.authorize');
+        Passport::authorizationView(function (array $parameters) {
+            $user = data_get($parameters, 'user');
+
+            return view('mcp.authorize', [
+                ...$parameters,
+                'workspace' => $user?->currentWorkspace,
+            ]);
+        });
+
+        Event::listen(AccessTokenCreated::class, BindWorkspaceToAccessToken::class);
     }
 
     protected function configureMorphMap(): void

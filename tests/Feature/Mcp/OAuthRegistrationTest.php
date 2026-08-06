@@ -58,6 +58,7 @@ test('mcp oauth consent view is available for workspace viewers', function () {
             'name' => 'Viewer Agent',
         ],
         'user' => $viewer,
+        'workspace' => $workspace,
         'scopes' => collect([(object) ['description' => 'Use MCP server']]),
         'authToken' => 'test-auth-token',
         'request' => request(),
@@ -66,6 +67,8 @@ test('mcp oauth consent view is available for workspace viewers', function () {
     expect($html)
         ->toContain('Authorize Viewer Agent')
         ->toContain($viewer->email)
+        ->toContain($workspace->name)
+        ->toContain('only access this workspace')
         ->and(view()->exists('mcp.authorize-denied'))->toBeFalse()
         ->and(class_exists(EnsureCanAuthorizeMcp::class))->toBeFalse();
 });

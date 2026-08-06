@@ -55,10 +55,10 @@ it('lists only the current users oauth clients as connected, excluding personal 
     $member->update(['current_workspace_id' => $this->workspace->id]);
 
     $ownerClientId = mcpOauthClient('Owner Agent');
-    mcpAccessToken($this->user, $ownerClientId);
+    mcpAccessToken($this->user, $ownerClientId, $this->workspace);
 
     $memberClientId = mcpOauthClient('Member Agent');
-    mcpAccessToken($member, $memberClientId);
+    mcpAccessToken($member, $memberClientId, $this->workspace);
 
     $pat = $this->user->createToken('API Key');
     AccessToken::query()->findOrFail($pat->token->id)
@@ -77,7 +77,7 @@ it('lists only the current users oauth clients as connected, excluding personal 
 });
 
 it('excludes unscoped oauth grants from connected clients', function (): void {
-    mcpAccessToken($this->user, mcpOauthClient('Unscoped Agent'), scopes: []);
+    mcpAccessToken($this->user, mcpOauthClient('Unscoped Agent'), $this->workspace, scopes: []);
 
     $this->actingAs($this->user)
         ->get(route('app.mcp.index'))
@@ -89,7 +89,7 @@ it('lists viewer own oauth grants as connected clients', function (): void {
     $this->workspace->members()->attach($viewer->id, ['role' => Role::Viewer->value]);
     $viewer->update(['current_workspace_id' => $this->workspace->id]);
 
-    mcpAccessToken($viewer, mcpOauthClient('Viewer Agent'));
+    mcpAccessToken($viewer, mcpOauthClient('Viewer Agent'), $this->workspace);
 
     $this->actingAs($viewer->fresh())
         ->get(route('app.mcp.index'))
@@ -101,7 +101,7 @@ it('lists viewer own oauth grants as connected clients', function (): void {
 
 it('disconnects a client by revoking its tokens', function (): void {
     $clientId = mcpOauthClient();
-    $token = mcpAccessToken($this->user, $clientId);
+    $token = mcpAccessToken($this->user, $clientId, $this->workspace);
 
     $this->actingAs($this->user)
         ->delete(route('app.mcp.disconnect', ['client' => $clientId]))
@@ -113,7 +113,7 @@ it('disconnects a client by revoking its tokens', function (): void {
 
 it('disconnects a client when its access token expired but its refresh token is live', function (): void {
     $clientId = mcpOauthClient();
-    $token = mcpAccessToken($this->user, $clientId);
+    $token = mcpAccessToken($this->user, $clientId, $this->workspace);
     $token->forceFill(['expires_at' => now()->subMinute()])->saveQuietly();
     $refreshTokenId = Str::random(80);
     DB::table('oauth_refresh_tokens')->insert([
@@ -134,7 +134,7 @@ it('disconnects a client when its access token expired but its refresh token is 
 
 it('lists a client when its access token expired but its refresh token is live', function (): void {
     $clientId = mcpOauthClient('Recoverable Agent');
-    $token = mcpAccessToken($this->user, $clientId);
+    $token = mcpAccessToken($this->user, $clientId, $this->workspace);
     $token->forceFill(['expires_at' => now()->subMinute()])->saveQuietly();
     DB::table('oauth_refresh_tokens')->insert([
         'id' => Str::random(80),
@@ -154,7 +154,7 @@ it('lists a client when its access token expired but its refresh token is live',
 
 it('hides a client when both access and refresh tokens are expired', function (): void {
     $clientId = mcpOauthClient('Dead Agent');
-    $token = mcpAccessToken($this->user, $clientId);
+    $token = mcpAccessToken($this->user, $clientId, $this->workspace);
     $token->forceFill(['expires_at' => now()->subMinute()])->saveQuietly();
     DB::table('oauth_refresh_tokens')->insert([
         'id' => Str::random(80),
@@ -181,7 +181,7 @@ it('does not list a teammates mcp connection', function (): void {
     $this->workspace->members()->attach($member->id, ['role' => Role::Member->value]);
     $member->update(['current_workspace_id' => $this->workspace->id]);
 
-    mcpAccessToken($this->user, mcpOauthClient('Owner Agent'));
+    mcpAccessToken($this->user, mcpOauthClient('Owner Agent'), $this->workspace);
 
     $this->actingAs($member->fresh())
         ->get(route('app.mcp.index'))
@@ -195,7 +195,7 @@ it('allows workspace members to view and disconnect their own mcp clients', func
     $member->update(['current_workspace_id' => $this->workspace->id]);
 
     $clientId = mcpOauthClient('Member Agent');
-    $token = mcpAccessToken($member, $clientId);
+    $token = mcpAccessToken($member, $clientId, $this->workspace);
 
     $this->actingAs($member->fresh())
         ->get(route('app.mcp.index'))
@@ -218,7 +218,7 @@ it('allows workspace viewers to view and disconnect their own mcp clients', func
     $viewer->update(['current_workspace_id' => $this->workspace->id]);
 
     $clientId = mcpOauthClient('Viewer Agent');
-    $token = mcpAccessToken($viewer, $clientId);
+    $token = mcpAccessToken($viewer, $clientId, $this->workspace);
 
     $this->actingAs($viewer->fresh())
         ->get(route('app.mcp.index'))
@@ -243,7 +243,7 @@ it('does not revoke another users mcp client tokens', function (): void {
     $member->update(['current_workspace_id' => $this->workspace->id]);
 
     $clientId = mcpOauthClient('Owner Agent');
-    $token = mcpAccessToken($this->user, $clientId);
+    $token = mcpAccessToken($this->user, $clientId, $this->workspace);
 
     $this->actingAs($member->fresh())
         ->delete(route('app.mcp.disconnect', ['client' => $clientId]))

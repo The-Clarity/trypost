@@ -28,6 +28,7 @@ class ApiKeyController extends Controller
         $tokens = AccessToken::where('user_id', $request->user()->id)
             ->where('workspace_id', $workspace->id)
             ->where('revoked', false)
+            ->personalAccessApiKey()
             ->latest()
             ->get()
             ->map(fn (AccessToken $token) => [
@@ -78,6 +79,7 @@ class ApiKeyController extends Controller
         $token = AccessToken::where('id', $tokenId)
             ->where('user_id', $request->user()->id)
             ->where('workspace_id', $workspace->id)
+            ->personalAccessApiKey()
             ->first();
 
         if (! $token) {

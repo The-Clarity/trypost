@@ -81,14 +81,10 @@ test('allows personal access tokens without a subscription in self-hosted mode',
 test('allows scoped mcp oauth without a subscription in self-hosted mode', function () {
     config(['trypost.self_hosted' => true]);
 
-    $result = $this->user->createToken('MCP', ['mcp:use']);
-    $token = AccessToken::query()->findOrFail($result->token->id);
-    DB::table('oauth_clients')
-        ->where('id', $token->client_id)
-        ->update(['grant_types' => json_encode(['authorization_code'])]);
+    $issued = mcpBearerToken($this->user, $this->workspace);
 
     $this->withHeaders([
-        'Authorization' => "Bearer {$result->accessToken}",
+        'Authorization' => "Bearer {$issued['plain_token']}",
         'Accept' => 'application/json, text/event-stream',
     ])->postJson(route('mcp.trypost'), [
         'jsonrpc' => '2.0',
@@ -142,13 +138,9 @@ test('rejects mcp oauth grants on api routes for workspace viewers', function ()
     $viewer = User::factory()->create(['account_id' => $this->user->account_id]);
     $this->workspace->members()->attach($viewer->id, ['role' => Role::Viewer->value]);
     $viewer->update(['current_workspace_id' => $this->workspace->id]);
-    $result = $viewer->createToken('MCP', ['mcp:use']);
-    $token = AccessToken::query()->findOrFail($result->token->id);
-    DB::table('oauth_clients')
-        ->where('id', $token->client_id)
-        ->update(['grant_types' => json_encode(['authorization_code'])]);
+    $issued = mcpBearerToken($viewer, $this->workspace);
 
-    $this->withHeaders(['Authorization' => "Bearer {$result->accessToken}"])
+    $this->withHeaders(['Authorization' => "Bearer {$issued['plain_token']}"])
         ->getJson(route('api.workspace.show'))
         ->assertForbidden()
         ->assertJson(['message' => 'Personal access token required.']);
@@ -160,13 +152,9 @@ test('rejects scoped mcp oauth grants on api routes', function () {
     $member = User::factory()->create(['account_id' => $this->user->account_id]);
     $this->workspace->members()->attach($member->id, ['role' => Role::Member->value]);
     $member->update(['current_workspace_id' => $this->workspace->id]);
-    $result = $member->createToken('MCP', ['mcp:use']);
-    $token = AccessToken::query()->findOrFail($result->token->id);
-    DB::table('oauth_clients')
-        ->where('id', $token->client_id)
-        ->update(['grant_types' => json_encode(['authorization_code'])]);
+    $issued = mcpBearerToken($member, $this->workspace);
 
-    $this->withHeaders(['Authorization' => "Bearer {$result->accessToken}"])
+    $this->withHeaders(['Authorization' => "Bearer {$issued['plain_token']}"])
         ->getJson(route('api.workspace.show'))
         ->assertForbidden()
         ->assertJson(['message' => 'Personal access token required.']);
@@ -178,13 +166,9 @@ test('rejects unscoped mcp oauth grants on api routes', function () {
     $member = User::factory()->create(['account_id' => $this->user->account_id]);
     $this->workspace->members()->attach($member->id, ['role' => Role::Member->value]);
     $member->update(['current_workspace_id' => $this->workspace->id]);
-    $result = $member->createToken('MCP');
-    $token = AccessToken::query()->findOrFail($result->token->id);
-    DB::table('oauth_clients')
-        ->where('id', $token->client_id)
-        ->update(['grant_types' => json_encode(['authorization_code'])]);
+    $issued = mcpBearerToken($member, $this->workspace, scopes: []);
 
-    $this->withHeaders(['Authorization' => "Bearer {$result->accessToken}"])
+    $this->withHeaders(['Authorization' => "Bearer {$issued['plain_token']}"])
         ->getJson(route('api.workspace.show'))
         ->assertForbidden()
         ->assertJson(['message' => 'Personal access token required.']);
@@ -217,14 +201,10 @@ test('rejects oauth grants without the mcp scope on the mcp endpoint', function 
     $this->workspace->members()->attach($member->id, ['role' => Role::Member->value]);
     $member->update(['current_workspace_id' => $this->workspace->id]);
 
-    $result = $member->createToken('MCP');
-    $token = AccessToken::query()->findOrFail($result->token->id);
-    DB::table('oauth_clients')
-        ->where('id', $token->client_id)
-        ->update(['grant_types' => json_encode(['authorization_code'])]);
+    $issued = mcpBearerToken($member, $this->workspace, scopes: []);
 
     $this->withHeaders([
-        'Authorization' => "Bearer {$result->accessToken}",
+        'Authorization' => "Bearer {$issued['plain_token']}",
         'Accept' => 'application/json, text/event-stream',
     ])->postJson(route('mcp.trypost'), [
         'jsonrpc' => '2.0',
@@ -245,14 +225,10 @@ test('allows scoped oauth grants for workspace members on the mcp endpoint', fun
     $this->workspace->members()->attach($member->id, ['role' => Role::Member->value]);
     $member->update(['current_workspace_id' => $this->workspace->id]);
 
-    $result = $member->createToken('MCP', ['mcp:use']);
-    $token = AccessToken::query()->findOrFail($result->token->id);
-    DB::table('oauth_clients')
-        ->where('id', $token->client_id)
-        ->update(['grant_types' => json_encode(['authorization_code'])]);
+    $issued = mcpBearerToken($member, $this->workspace);
 
     $this->withHeaders([
-        'Authorization' => "Bearer {$result->accessToken}",
+        'Authorization' => "Bearer {$issued['plain_token']}",
         'Accept' => 'application/json, text/event-stream',
     ])->postJson(route('mcp.trypost'), [
         'jsonrpc' => '2.0',
@@ -273,14 +249,10 @@ test('allows scoped oauth grants for workspace viewers on the mcp endpoint', fun
     $this->workspace->members()->attach($viewer->id, ['role' => Role::Viewer->value]);
     $viewer->update(['current_workspace_id' => $this->workspace->id]);
 
-    $result = $viewer->createToken('MCP', ['mcp:use']);
-    $token = AccessToken::query()->findOrFail($result->token->id);
-    DB::table('oauth_clients')
-        ->where('id', $token->client_id)
-        ->update(['grant_types' => json_encode(['authorization_code'])]);
+    $issued = mcpBearerToken($viewer, $this->workspace);
 
     $this->withHeaders([
-        'Authorization' => "Bearer {$result->accessToken}",
+        'Authorization' => "Bearer {$issued['plain_token']}",
         'Accept' => 'application/json, text/event-stream',
     ])->postJson(route('mcp.trypost'), [
         'jsonrpc' => '2.0',
@@ -310,14 +282,11 @@ test('rejects a revoked personal access token on api routes', function () {
 });
 
 test('does not treat oauth tokens with a revoked client as personal access tokens', function () {
-    $result = $this->user->createToken('MCP', ['mcp:use']);
-    $token = AccessToken::query()->findOrFail($result->token->id);
+    $issued = mcpBearerToken($this->user, $this->workspace);
+    $token = $issued['token'];
     DB::table('oauth_clients')
         ->where('id', $token->client_id)
-        ->update([
-            'grant_types' => json_encode(['authorization_code']),
-            'revoked' => true,
-        ]);
+        ->update(['revoked' => true]);
 
     $token = $token->fresh();
 
@@ -330,19 +299,14 @@ test('rejects api requests without a bearer token', function () {
         ->assertUnauthorized();
 });
 
-test('rejects mcp oauth when no current workspace is selected', function () {
+test('rejects mcp oauth without a bound workspace', function () {
     subscribeAccount($this->user->account);
 
-    $result = $this->user->createToken('MCP', ['mcp:use']);
-    $token = AccessToken::query()->findOrFail($result->token->id);
-    DB::table('oauth_clients')
-        ->where('id', $token->client_id)
-        ->update(['grant_types' => json_encode(['authorization_code'])]);
-
-    $this->user->update(['current_workspace_id' => null]);
+    $issued = mcpBearerToken($this->user, $this->workspace);
+    $issued['token']->forceFill(['workspace_id' => null])->saveQuietly();
 
     $this->withHeaders([
-        'Authorization' => "Bearer {$result->accessToken}",
+        'Authorization' => "Bearer {$issued['plain_token']}",
         'Accept' => 'application/json, text/event-stream',
     ])->postJson(route('mcp.trypost'), [
         'jsonrpc' => '2.0',
@@ -358,7 +322,7 @@ test('rejects mcp oauth when no current workspace is selected', function () {
         ->assertJson(['message' => 'No workspace selected.']);
 });
 
-test('allows mcp oauth that follows the users current workspace', function () {
+test('mcp oauth uses its bound workspace even when the user switched current workspace', function () {
     subscribeAccount($this->user->account);
 
     $otherWorkspace = Workspace::factory()->create([
@@ -367,11 +331,7 @@ test('allows mcp oauth that follows the users current workspace', function () {
     ]);
     $otherWorkspace->members()->attach($this->user->id, ['role' => Role::Member->value]);
 
-    $result = $this->user->createToken('MCP', ['mcp:use']);
-    $token = AccessToken::query()->findOrFail($result->token->id);
-    DB::table('oauth_clients')
-        ->where('id', $token->client_id)
-        ->update(['grant_types' => json_encode(['authorization_code'])]);
+    $issued = mcpBearerToken($this->user, $this->workspace);
 
     $payload = [
         'jsonrpc' => '2.0',
@@ -387,16 +347,57 @@ test('allows mcp oauth that follows the users current workspace', function () {
     $this->user->update(['current_workspace_id' => $otherWorkspace->id]);
 
     $this->withHeaders([
-        'Authorization' => "Bearer {$result->accessToken}",
+        'Authorization' => "Bearer {$issued['plain_token']}",
         'Accept' => 'application/json, text/event-stream',
     ])->postJson(route('mcp.trypost'), $payload)->assertSuccessful();
 
-    $this->user->update(['current_workspace_id' => $this->workspace->id]);
+    expect($this->user->fresh()->current_workspace_id)->toBe($otherWorkspace->id);
+    expect($issued['token']->fresh()->workspace_id)->toBe($this->workspace->id);
+});
+
+test('rejects mcp oauth bound to a workspace the user no longer belongs to', function () {
+    subscribeAccount($this->user->account);
+
+    $member = User::factory()->create(['account_id' => $this->user->account_id]);
+    $this->workspace->members()->attach($member->id, ['role' => Role::Member->value]);
+    $member->update(['current_workspace_id' => $this->workspace->id]);
+
+    $issued = mcpBearerToken($member, $this->workspace);
+    $this->workspace->members()->detach($member->id);
 
     $this->withHeaders([
-        'Authorization' => "Bearer {$result->accessToken}",
+        'Authorization' => "Bearer {$issued['plain_token']}",
         'Accept' => 'application/json, text/event-stream',
-    ])->postJson(route('mcp.trypost'), $payload)->assertSuccessful();
+    ])->postJson(route('mcp.trypost'), [
+        'jsonrpc' => '2.0',
+        'id' => 1,
+        'method' => 'initialize',
+        'params' => [
+            'protocolVersion' => '2025-03-26',
+            'capabilities' => (object) [],
+            'clientInfo' => ['name' => 'Pest', 'version' => '1.0'],
+        ],
+    ])
+        ->assertForbidden()
+        ->assertJson(['message' => 'Workspace access denied.']);
+});
+
+test('personal access token uses its bound workspace even when the user switched current workspace', function () {
+    subscribeAccount($this->user->account);
+
+    $otherWorkspace = Workspace::factory()->create([
+        'account_id' => $this->user->account_id,
+        'user_id' => $this->user->id,
+        'name' => 'Workspace B',
+    ]);
+    $otherWorkspace->members()->attach($this->user->id, ['role' => Role::Admin->value]);
+
+    $this->user->update(['current_workspace_id' => $otherWorkspace->id]);
+
+    $this->withHeaders(['Authorization' => 'Bearer '.$this->plainToken])
+        ->getJson(route('api.workspace.show'))
+        ->assertOk()
+        ->assertJsonPath('id', $this->workspace->id);
 });
 
 test('records last_used_at on the access token after a successful api request', function () {
@@ -419,16 +420,11 @@ test('records last_used_at on the access token after a successful api request', 
 test('rejects an expired mcp oauth grant on the mcp endpoint', function () {
     subscribeAccount($this->user->account);
 
-    $result = $this->user->createToken('MCP', ['mcp:use']);
-    $token = AccessToken::query()->findOrFail($result->token->id);
-    DB::table('oauth_clients')
-        ->where('id', $token->client_id)
-        ->update(['grant_types' => json_encode(['authorization_code'])]);
-
-    $token->forceFill(['expires_at' => now()->subMinute()])->saveQuietly();
+    $issued = mcpBearerToken($this->user, $this->workspace);
+    $issued['token']->forceFill(['expires_at' => now()->subMinute()])->saveQuietly();
 
     $this->withHeaders([
-        'Authorization' => "Bearer {$result->accessToken}",
+        'Authorization' => "Bearer {$issued['plain_token']}",
         'Accept' => 'application/json, text/event-stream',
     ])->postJson(route('mcp.trypost'), [
         'jsonrpc' => '2.0',

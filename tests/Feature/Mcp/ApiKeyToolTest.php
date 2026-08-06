@@ -51,15 +51,10 @@ test('list api keys returns wrapped api_keys array with ApiKeyResource shape', f
         });
 });
 
-test('list api keys excludes OAuth tokens (workspace_id null)', function () {
-    // Personal Access Token (workspace bound)
+test('list api keys excludes workspace-bound MCP OAuth grants', function () {
     attachToken($this->user, $this->workspace);
 
-    // OAuth-flow token (workspace_id null — like ChatGPT MCP session)
-    $oauthResult = $this->user->createToken('OAuth Session');
-    AccessToken::find($oauthResult->token->id)
-        ->forceFill(['workspace_id' => null])
-        ->saveQuietly();
+    mcpAccessToken($this->user, mcpOauthClient('ChatGPT'), $this->workspace);
 
     $response = TryPostServer::actingAs($this->user)
         ->tool(ListApiKeysTool::class, []);
@@ -215,11 +210,8 @@ test('cannot delete api key from another user', function () {
     $response->assertHasErrors(['API key not found.']);
 });
 
-test('cannot delete OAuth-flow token through this tool', function () {
-    // OAuth token has workspace_id null — DeleteApiKeyTool filter excludes it
-    $oauthResult = $this->user->createToken('OAuth Session');
-    $oauthToken = AccessToken::find($oauthResult->token->id);
-    $oauthToken->forceFill(['workspace_id' => null])->saveQuietly();
+test('cannot delete workspace-bound MCP OAuth through the api key tool', function () {
+    $oauthToken = mcpAccessToken($this->user, mcpOauthClient('ChatGPT'), $this->workspace);
 
     $response = TryPostServer::actingAs($this->user)
         ->tool(DeleteApiKeyTool::class, ['api_key_id' => $oauthToken->id]);

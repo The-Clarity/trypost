@@ -326,7 +326,7 @@ test('demoting a member to viewer keeps their mcp oauth grants', function () {
     $this->workspace->members()->attach($member->id, ['role' => WorkspaceRole::Member->value]);
     $member->update(['current_workspace_id' => $this->workspace->id]);
 
-    $oauth = mcpAccessToken($member, mcpOauthClient());
+    $oauth = mcpAccessToken($member, mcpOauthClient(), $this->workspace);
     $refreshTokenId = (string) Str::uuid();
     DB::table('oauth_refresh_tokens')->insert([
         'id' => $refreshTokenId,
@@ -357,7 +357,7 @@ test('demoting to viewer on one workspace keeps mcp when they remain a member el
     $this->workspace->members()->attach($member->id, ['role' => WorkspaceRole::Member->value]);
     $other->members()->attach($member->id, ['role' => WorkspaceRole::Member->value]);
     $member->update(['current_workspace_id' => $this->workspace->id]);
-    $oauth = mcpAccessToken($member, mcpOauthClient());
+    $oauth = mcpAccessToken($member, mcpOauthClient(), $this->workspace);
 
     $response = $this->actingAs($this->user)->put(route('app.members.update-role', $member), [
         'role' => WorkspaceRole::Viewer->value,

@@ -176,7 +176,7 @@ function mcpOauthClient(string $name = 'My Agent'): string
         'secret' => null,
         'provider' => null,
         'redirect_uris' => '[]',
-        'grant_types' => json_encode(['authorization_code']),
+        'grant_types' => json_encode(['authorization_code', 'refresh_token']),
         'revoked' => false,
         'created_at' => now(),
         'updated_at' => now(),
@@ -190,20 +190,50 @@ function mcpOauthClient(string $name = 'My Agent'): string
  *
  * @param  list<string>  $scopes
  */
-function mcpAccessToken(User $user, string $clientId, array $scopes = ['mcp:use']): AccessToken
-{
+function mcpAccessToken(
+    User $user,
+    string $clientId,
+    ?Workspace $workspace = null,
+    array $scopes = ['mcp:use'],
+): AccessToken {
     $token = new AccessToken;
     $token->forceFill([
         'id' => Str::random(80),
         'user_id' => $user->id,
         'client_id' => $clientId,
-        'workspace_id' => null,
+        'workspace_id' => $workspace?->id,
         'name' => 'MCP',
         'scopes' => $scopes,
         'revoked' => false,
+        'expires_at' => now()->addYear(),
     ])->save();
 
     return $token->refresh();
+}
+
+/**
+ * Issue a Passport token, attach it to a dedicated MCP OAuth client, and bind
+ * it to a workspace — the post-#222 shape used by middleware / MCP endpoint tests.
+ *
+ * @param  list<string>  $scopes
+ * @return array{token: AccessToken, plain_token: string}
+ */
+function mcpBearerToken(User $user, Workspace $workspace, array $scopes = ['mcp:use']): array
+{
+    $result = $user->createToken('MCP', $scopes);
+    $token = AccessToken::query()->findOrFail($result->token->id);
+
+    // Reassign to a dedicated MCP client so we never mutate Passport's shared
+    // personal-access client (which would poison PAT fixtures in the same run).
+    $token->forceFill([
+        'client_id' => mcpOauthClient(),
+        'workspace_id' => $workspace->id,
+    ])->saveQuietly();
+
+    return [
+        'token' => $token->refresh(),
+        'plain_token' => $result->accessToken,
+    ];
 }
 
 /**

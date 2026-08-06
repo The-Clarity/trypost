@@ -8,7 +8,6 @@ use App\Models\AccessToken;
 use App\Models\User;
 use App\Models\Workspace;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
 
 class RevokeMcpOAuthGrants
 {
@@ -46,15 +45,37 @@ class RevokeMcpOAuthGrants
 
     /**
      * Revoke active MCP OAuth grants for one OAuth client owned by the user.
+     * When a workspace is provided, only grants bound to that workspace are revoked.
      *
      * @return bool True when at least one grant was revoked.
      */
-    public static function forUserClient(User $user, string $clientId): bool
+    public static function forUserClient(User $user, string $clientId, ?Workspace $workspace = null): bool
+    {
+        $query = AccessToken::query()
+            ->where('user_id', $user->id)
+            ->where('client_id', $clientId)
+            ->mcpOAuth()
+            ->where('revoked', false);
+
+        if ($workspace !== null) {
+            $query->where('workspace_id', $workspace->id);
+        }
+
+        return self::revoke($query->get());
+    }
+
+    /**
+     * Revoke MCP OAuth grants bound to a specific workspace for a user
+     * (e.g. when the member is removed from that workspace).
+     *
+     * @return bool True when at least one grant was revoked.
+     */
+    public static function forUserOnWorkspace(string $userId, Workspace $workspace): bool
     {
         return self::revoke(
             AccessToken::query()
-                ->where('user_id', $user->id)
-                ->where('client_id', $clientId)
+                ->where('user_id', $userId)
+                ->where('workspace_id', $workspace->id)
                 ->mcpOAuth()
                 ->where('revoked', false)
                 ->get(),
@@ -77,17 +98,7 @@ class RevokeMcpOAuthGrants
             return false;
         }
 
-        DB::transaction(function () use ($tokens): void {
-            $tokenIds = $tokens->pluck('id');
-
-            DB::table('oauth_refresh_tokens')
-                ->whereIn('access_token_id', $tokenIds)
-                ->update(['revoked' => true]);
-
-            $tokens->each(function (AccessToken $token): void {
-                $token->forceFill(['revoked' => true])->saveQuietly();
-            });
-        });
+        RevokeAccessTokens::execute($tokens);
 
         return true;
     }

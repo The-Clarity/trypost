@@ -22,17 +22,18 @@ class McpSettingsController extends Controller
 
         return Inertia::render('settings/workspace/Mcp', [
             'mcpUrl' => route('mcp.trypost'),
-            'connectedClients' => ListConnectedMcpClients::forUser($user),
+            'connectedClients' => ListConnectedMcpClients::forUser($user, $workspace),
         ]);
     }
 
     public function disconnect(Request $request, string $client): RedirectResponse
     {
         $user = $request->user();
+        $workspace = $user->currentWorkspace;
 
-        $this->authorize('view', $user->currentWorkspace);
+        $this->authorize('view', $workspace);
 
-        if (! RevokeMcpOAuthGrants::forUserClient($user, $client)) {
+        if (! RevokeMcpOAuthGrants::forUserClient($user, $client, $workspace)) {
             return back();
         }
 

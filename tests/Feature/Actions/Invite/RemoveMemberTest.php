@@ -6,7 +6,6 @@ use App\Actions\Invite\RemoveMember;
 use App\Enums\UserWorkspace\Role;
 use App\Models\AccessToken;
 use App\Models\User;
-use App\Models\Workspace;
 
 test('remove member clears current workspace when it was the removed membership', function () {
     [
@@ -64,7 +63,7 @@ test('remove member prefers another workspace on the same account', function () 
     expect($member->current_workspace_id)->toBe($sharedB->id);
 });
 
-test('remove member keeps mcp oauth when create-post access remains elsewhere', function () {
+test('remove member keeps mcp oauth bound to another workspace', function () {
     [
         'member' => $member,
         'shared_workspaces' => [$sharedA, $sharedB],
@@ -72,7 +71,7 @@ test('remove member keeps mcp oauth when create-post access remains elsewhere', 
         sharedWorkspaces: 2,
         setMemberCurrent: true,
     );
-    $oauth = mcpAccessToken($member, mcpOauthClient());
+    $oauth = mcpAccessToken($member, mcpOauthClient(), $sharedB);
 
     RemoveMember::execute($sharedA, $member->id);
 
@@ -80,7 +79,7 @@ test('remove member keeps mcp oauth when create-post access remains elsewhere', 
         ->and($member->fresh()->can('createPost', $sharedB))->toBeTrue();
 });
 
-test('remove member keeps mcp oauth when the member remains a viewer elsewhere', function () {
+test('remove member keeps mcp oauth on another workspace when the member remains a viewer there', function () {
     [
         'member' => $member,
         'shared_workspaces' => [$sharedA, $sharedB],
@@ -91,7 +90,7 @@ test('remove member keeps mcp oauth when the member remains a viewer elsewhere',
     $sharedB->members()->updateExistingPivot($member->id, [
         'role' => Role::Viewer->value,
     ]);
-    $oauth = mcpAccessToken($member, mcpOauthClient());
+    $oauth = mcpAccessToken($member, mcpOauthClient(), $sharedB);
 
     RemoveMember::execute($sharedA, $member->id);
 
@@ -100,12 +99,12 @@ test('remove member keeps mcp oauth when the member remains a viewer elsewhere',
         ->and($member->fresh()->can('view', $sharedB))->toBeTrue();
 });
 
-test('remove member revokes api keys without touching mcp oauth grants on the same workspace id', function () {
+test('remove member revokes workspace-scoped api keys and mcp oauth tokens', function () {
     [
         'member' => $member,
-        'shared_workspaces' => [$workspace],
+        'shared_workspaces' => [$workspace, $other],
     ] = strandedMemberOnSharedAccount(
-        sharedWorkspaces: 1,
+        sharedWorkspaces: 2,
         setMemberCurrent: true,
     );
 
@@ -113,19 +112,18 @@ test('remove member revokes api keys without touching mcp oauth grants on the sa
     $patToken = AccessToken::query()->findOrFail($pat->token->id);
     $patToken->forceFill(['workspace_id' => $workspace->id])->saveQuietly();
 
-    // Mis-bound workspace_id must still not classify this as a PAT revoke target.
-    $oauth = mcpAccessToken($member, mcpOauthClient());
-    $oauth->forceFill(['workspace_id' => $workspace->id])->saveQuietly();
+    $otherPat = $member->createToken('Other Key');
+    $otherPatToken = AccessToken::query()->findOrFail($otherPat->token->id);
+    $otherPatToken->forceFill(['workspace_id' => $other->id])->saveQuietly();
 
-    // Keep the member alive (second workspace) so we only exercise API-key revoke.
-    $other = Workspace::factory()->create([
-        'account_id' => $member->account_id,
-        'user_id' => $member->account->owner_id,
-    ]);
-    $other->members()->attach($member->id, ['role' => Role::Member->value]);
+    $oauth = mcpAccessToken($member, mcpOauthClient(), $workspace);
+    $otherOauth = mcpAccessToken($member, mcpOauthClient(), $other);
 
     RemoveMember::execute($workspace, $member->id);
 
     expect($patToken->fresh()->revoked)->toBeTrue()
-        ->and($oauth->fresh()->revoked)->toBeFalse();
+        ->and($oauth->fresh()->revoked)->toBeTrue()
+        ->and($otherPatToken->fresh()->revoked)->toBeFalse()
+        ->and($otherOauth->fresh()->revoked)->toBeFalse()
+        ->and(User::find($member->id))->not->toBeNull();
 });

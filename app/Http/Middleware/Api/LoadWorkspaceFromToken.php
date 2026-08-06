@@ -32,12 +32,13 @@ class LoadWorkspaceFromToken
             return response()->json(['message' => 'Token expired.'], Response::HTTP_UNAUTHORIZED);
         }
 
-        // Personal API tokens (created from settings) bind to a specific
-        // workspace at creation. OAuth tokens (e.g. ChatGPT MCP) don't —
-        // they follow the user's current workspace.
+        // Personal API keys and MCP OAuth grants both bind to a workspace at
+        // issue time. Resolve from the token — never from the user's current
+        // workspace switcher (that would let a multi-workspace agent silently
+        // act on the wrong tenant).
         $workspace = $token->workspace_id
-            ? Workspace::find($token->workspace_id)
-            : $user->currentWorkspace;
+            ? Workspace::query()->find($token->workspace_id)
+            : null;
 
         if (! $workspace) {
             return response()->json(['message' => 'No workspace selected.'], Response::HTTP_UNAUTHORIZED);

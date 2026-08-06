@@ -33,6 +33,7 @@ class RemoveMember
 
             $workspace->members()->detach($userId);
             RevokeWorkspaceApiKeys::forUserOnWorkspace($userId, $workspace);
+            RevokeMcpOAuthGrants::forUserOnWorkspace($userId, $workspace);
 
             if (! $user) {
                 return;
@@ -54,8 +55,7 @@ class RemoveMember
                 $settlement = SettleStrandedMember::execute($user, $account);
             }
 
-            // If the member still exists but can no longer view any workspace,
-            // drop their MCP OAuth grants (refresh tokens included).
+            // Safety net for any leftover unbound MCP grants after full removal.
             $remaining = User::query()->find($userId);
 
             if ($remaining instanceof User) {

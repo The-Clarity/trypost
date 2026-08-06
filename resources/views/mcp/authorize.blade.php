@@ -69,9 +69,18 @@
             <!-- Content -->
             <div class="p-6 pt-0 space-y-4">
                 <!-- User Info -->
-                <div class="rounded-lg border p-4 bg-muted/50">
-                    <p class="text-sm text-muted-foreground mb-2">Logged in as:</p>
-                    <p class="font-medium">{{ $user->email }}</p>
+                <div class="rounded-lg border p-4 bg-muted/50 space-y-3">
+                    <div>
+                        <p class="text-sm text-muted-foreground mb-2">Logged in as:</p>
+                        <p class="font-medium">{{ $user->email }}</p>
+                    </div>
+                    @if($workspace ?? null)
+                        <div>
+                            <p class="text-sm text-muted-foreground mb-2">Workspace:</p>
+                            <p class="font-medium">{{ $workspace->name }}</p>
+                            <p class="text-xs text-muted-foreground mt-1">This connection will only access this workspace.</p>
+                        </div>
+                    @endif
                 </div>
 
                 <!-- Scopes / Permissions -->
