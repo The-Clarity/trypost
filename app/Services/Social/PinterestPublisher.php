@@ -11,6 +11,7 @@ use App\Enums\SocialAccount\Platform;
 use App\Exceptions\PlatformUnavailableException;
 use App\Exceptions\Social\ErrorCategory;
 use App\Exceptions\Social\PinterestPublishException;
+use App\Exceptions\TokenExpiredException;
 use App\Models\PostPlatform;
 use App\Models\SocialAccount;
 use App\Services\Media\MediaOptimizer;
@@ -335,6 +336,13 @@ class PinterestPublisher
                 ->get($this->baseUrl."/media/{$mediaId}");
 
             if ($response->failed()) {
+                if ($response->status() === 401) {
+                    throw new TokenExpiredException(
+                        message: data_get($response->json(), 'message', 'Access token has expired or been revoked'),
+                        platformErrorCode: '401',
+                    );
+                }
+
                 Log::warning('Pinterest media status check failed', [
                     'media_id' => $mediaId,
                     'attempt' => $i + 1,

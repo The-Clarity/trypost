@@ -7,6 +7,7 @@ namespace App\Console\Commands;
 use App\Enums\Post\Status as PostStatus;
 use App\Enums\PostPlatform\Status as PlatformStatus;
 use App\Models\Post;
+use App\Models\PostPlatform;
 use Illuminate\Console\Command;
 
 class RecoverStuckPosts extends Command
@@ -23,21 +24,21 @@ class RecoverStuckPosts extends Command
             ->where('status', PostStatus::Publishing)
             ->where('updated_at', '<=', now()->subHour())
             ->each(function (Post $post) use (&$count) {
-                // Mark stuck platforms as failed
                 $post->postPlatforms()
                     ->where('enabled', true)
                     ->whereIn('status', [PlatformStatus::Publishing, PlatformStatus::Pending, PlatformStatus::Retrying])
                     ->where('updated_at', '<=', now()->subHour())
-                    ->update([
-                        'status' => PlatformStatus::Failed,
-                        'error_message' => __('posts.errors.publishing_timed_out'),
-                        'error_context' => json_encode([
-                            'category' => 'timeout',
-                            'failed_at' => now()->toIso8601String(),
-                        ]),
-                    ]);
+                    ->each(function (PostPlatform $platform) {
+                        $platform->update([
+                            'status' => PlatformStatus::Failed,
+                            'error_message' => __('posts.errors.publishing_timed_out'),
+                            'error_context' => [
+                                'category' => 'timeout',
+                                'failed_at' => now()->toIso8601String(),
+                            ],
+                        ]);
+                    });
 
-                // Recalculate post status
                 $enabledPlatforms = $post->postPlatforms()->where('enabled', true)->get();
                 $total = $enabledPlatforms->count();
                 $publishedCount = $enabledPlatforms->where('status', PlatformStatus::Published)->count();

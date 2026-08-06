@@ -43,6 +43,9 @@ test('it recovers posts stuck in publishing for over 1 hour', function () {
 
     expect($platform->status)->toBe(PlatformStatus::Failed);
     expect($platform->error_message)->toBe(__('posts.errors.publishing_timed_out'));
+    expect($platform->error_context)->toMatchArray([
+        'category' => 'timeout',
+    ]);
     expect($post->status)->toBe(PostStatus::Failed);
 });
 

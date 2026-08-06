@@ -25,6 +25,7 @@ use App\Services\Social\LinkedInPagePublisher;
 use App\Services\Social\LinkedInPublisher;
 use App\Services\Social\PinterestPublisher;
 use Carbon\Carbon;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
@@ -279,7 +280,9 @@ test('publish reschedules platform unavailable retry via Bus dispatch (not marke
     expect($this->socialAccount->status)->toBe(AccountStatus::Connected);
 
     Bus::assertDispatched(PublishToSocialPlatform::class, function ($job) {
-        return $job->postPlatform->id === $this->postPlatform->id;
+        return $job->postPlatform->id === $this->postPlatform->id
+            && $job->uniqueAttempt === 1
+            && $job->uniqueId() === "{$this->postPlatform->id}:1";
     });
 });
 
@@ -321,7 +324,8 @@ test('publish reschedules when pinterest video processing times out', function (
         ->and($postPlatform->error_context['detail'] ?? null)->toContain('Pinterest media processing timeout');
 
     Bus::assertDispatched(PublishToSocialPlatform::class, function ($job) use ($postPlatform) {
-        return $job->postPlatform->id === $postPlatform->id;
+        return $job->postPlatform->id === $postPlatform->id
+            && $job->uniqueAttempt === 1;
     });
 });
 
@@ -555,6 +559,14 @@ test('publish job timeout leaves headroom above the pinterest media poll budget'
         ->toBeGreaterThan((new PublishToSocialPlatform($this->postPlatform))->timeout)
         ->and(config('queue.connections.redis.retry_after'))
         ->toBeGreaterThan((new PublishToSocialPlatform($this->postPlatform))->timeout);
+});
+
+test('publish job unique id includes the platform and attempt', function () {
+    $job = new PublishToSocialPlatform($this->postPlatform, 3);
+
+    expect($job)->toBeInstanceOf(ShouldBeUnique::class)
+        ->and($job->uniqueId())->toBe("{$this->postPlatform->id}:3")
+        ->and($job->uniqueFor)->toBeGreaterThanOrEqual($job->timeout);
 });
 
 test('publish to social platform updates post status when all platforms finished', function () {

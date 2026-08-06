@@ -31,11 +31,12 @@ use App\Services\Social\ThreadsPublisher;
 use App\Services\Social\TikTokPublisher;
 use App\Services\Social\XPublisher;
 use App\Services\Social\YouTubePublisher;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
 
-class PublishToSocialPlatform implements ShouldQueue
+class PublishToSocialPlatform implements ShouldBeUnique, ShouldQueue
 {
     use Queueable;
 
@@ -48,13 +49,25 @@ class PublishToSocialPlatform implements ShouldQueue
     public int $timeout = 900;
 
     /**
+     * Hold the unique lock at least as long as the job may run.
+     */
+    public int $uniqueFor = 960;
+
+    /**
      * Max platform-unavailable reschedules before hard-failing (~1 hour at 10 min each).
      */
     public const MAX_PLATFORM_UNAVAILABLE_RETRIES = 6;
 
-    public function __construct(public PostPlatform $postPlatform)
-    {
+    public function __construct(
+        public PostPlatform $postPlatform,
+        public int $uniqueAttempt = 0,
+    ) {
         $this->onQueue($postPlatform->platform->queue());
+    }
+
+    public function uniqueId(): string
+    {
+        return "{$this->postPlatform->id}:{$this->uniqueAttempt}";
     }
 
     public function handle(): void
@@ -246,7 +259,7 @@ class PublishToSocialPlatform implements ShouldQueue
             ],
         ]);
 
-        self::dispatch($this->postPlatform)->delay($nextAttemptAt);
+        self::dispatch($this->postPlatform, $retryCount)->delay($nextAttemptAt);
     }
 
     private function broadcastStatus(): void
