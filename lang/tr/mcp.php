@@ -41,6 +41,9 @@ return [
         'cancel' => 'Cancel',
         'approve' => 'Authorize',
         'approving' => 'Authorizing...',
+        'select_workspace' => 'Select a workspace',
+        'search_workspace' => 'Search workspaces...',
+        'no_workspace_found' => 'No workspace found',
         'scope_mcp_use' => 'Use MCP server',
     ],
 
