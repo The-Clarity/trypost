@@ -32,6 +32,7 @@ use App\Models\WorkspaceSignature;
 use App\Passport\AccessTokenRepository;
 use App\Passport\AuthCode;
 use App\Passport\AuthCodeRepository;
+use App\Passport\AuthorizationView;
 use App\Services\PostHogService;
 use App\Services\PostTemplate\Registry as PostTemplateRegistry;
 use App\Socialite\DiscordProvider;
@@ -52,7 +53,6 @@ use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
-use Inertia\Inertia;
 use Laravel\Cashier\Cashier;
 use Laravel\Cashier\Events\WebhookReceived;
 use Laravel\Nightwatch\Facades\Nightwatch;
@@ -60,7 +60,6 @@ use Laravel\Nightwatch\Records\CacheEvent;
 use Laravel\Passport\Bridge\AccessTokenRepository as PassportAccessTokenRepository;
 use Laravel\Passport\Bridge\AuthCodeRepository as PassportAuthCodeRepository;
 use Laravel\Passport\Passport;
-use Laravel\Passport\Scope;
 use Laravel\Socialite\Facades\Socialite;
 use Laravel\Socialite\Two\GoogleProvider;
 use PostHog\PostHog;
@@ -122,50 +121,9 @@ class AppServiceProvider extends ServiceProvider
             'mcp:use' => 'Use MCP server',
         ]);
 
-        Passport::authorizationView(function (array $parameters) {
-            $user = data_get($parameters, 'user');
-
-            $workspaces = $user instanceof User
-                ? $user->accountWorkspaces()->orderBy('name')->get()
-                : collect();
-
-            $currentId = $user instanceof User && $user->current_workspace_id
-                ? (string) $user->current_workspace_id
-                : null;
-
-            $selectedWorkspaceId = $currentId !== null && $workspaces->contains(
-                fn (Workspace $workspace): bool => (string) $workspace->id === $currentId,
-            )
-                ? $currentId
-                : (string) ($workspaces->first()?->id ?? '');
-
-            return Inertia::render('mcp/Authorize', [
-                'client' => [
-                    'id' => (string) data_get($parameters, 'client.id'),
-                    'name' => (string) data_get($parameters, 'client.name'),
-                ],
-                'user' => [
-                    'email' => (string) data_get($parameters, 'user.email'),
-                ],
-                'workspaces' => $workspaces
-                    ->map(fn (Workspace $workspace): array => [
-                        'id' => (string) $workspace->id,
-                        'name' => $workspace->name,
-                    ])
-                    ->values()
-                    ->all(),
-                'selectedWorkspaceId' => $selectedWorkspaceId,
-                'scopes' => collect(data_get($parameters, 'scopes', []))
-                    ->map(fn (Scope $scope): array => [
-                        'id' => $scope->id,
-                        'description' => $scope->description,
-                    ])
-                    ->values()
-                    ->all(),
-                'authToken' => (string) data_get($parameters, 'authToken'),
-                'state' => (string) data_get($parameters, 'request.state', ''),
-            ]);
-        });
+        Passport::authorizationView(
+            fn (array $parameters) => $this->app->make(AuthorizationView::class)($parameters),
+        );
     }
 
     protected function configureMorphMap(): void
