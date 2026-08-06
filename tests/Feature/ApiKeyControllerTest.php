@@ -42,6 +42,30 @@ it('shows api keys page', function () {
         );
 });
 
+it('excludes workspace-bound mcp oauth grants from the api keys page', function () {
+    makeWorkspaceToken($this->user, $this->workspace);
+    $oauth = mcpAccessToken($this->user, mcpOauthClient('Claude'), $this->workspace);
+
+    $this->actingAs($this->user)
+        ->get(route('app.api-keys.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->has('apiTokens', 1)
+            ->where('apiTokens', fn ($tokens): bool => collect($tokens)->every(
+                fn (array $token): bool => $token['id'] !== $oauth->id,
+            )));
+});
+
+it('cannot delete a workspace-bound mcp oauth grant through api keys', function () {
+    $oauth = mcpAccessToken($this->user, mcpOauthClient('Claude'), $this->workspace);
+
+    $this->actingAs($this->user)
+        ->delete(route('app.api-keys.destroy', $oauth->id))
+        ->assertNotFound();
+
+    expect($oauth->fresh()->revoked)->toBeFalse();
+});
+
 it('creates an api key', function () {
     $this->actingAs($this->user)
         ->post(route('app.api-keys.store'), ['name' => 'My API Key'])

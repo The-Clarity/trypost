@@ -266,6 +266,66 @@ it('does not revoke personal access tokens via disconnect', function (): void {
     expect($token->fresh()->revoked)->toBeFalse();
 });
 
+it('lists only mcp connections for the current workspace', function (): void {
+    $workspaceB = Workspace::factory()->create([
+        'account_id' => $this->user->account_id,
+        'user_id' => $this->user->id,
+        'name' => 'Workspace B',
+    ]);
+    $workspaceB->members()->attach($this->user->id, ['role' => Role::Admin->value]);
+
+    $clientId = mcpOauthClient('Claude');
+    mcpAccessToken($this->user, $clientId, $this->workspace);
+    mcpAccessToken($this->user, $clientId, $workspaceB);
+
+    $this->actingAs($this->user)
+        ->get(route('app.mcp.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->has('connectedClients', 1)
+            ->where('connectedClients.0.client_id', $clientId)
+            ->where('connectedClients.0.name', 'Claude'));
+
+    $this->user->update(['current_workspace_id' => $workspaceB->id]);
+
+    $this->actingAs($this->user->fresh())
+        ->get(route('app.mcp.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->has('connectedClients', 1)
+            ->where('connectedClients.0.client_id', $clientId)
+            ->where('connectedClients.0.name', 'Claude'));
+});
+
+it('disconnects a client only on the current workspace', function (): void {
+    $workspaceB = Workspace::factory()->create([
+        'account_id' => $this->user->account_id,
+        'user_id' => $this->user->id,
+    ]);
+    $workspaceB->members()->attach($this->user->id, ['role' => Role::Admin->value]);
+
+    $clientId = mcpOauthClient('Claude');
+    $onA = mcpAccessToken($this->user, $clientId, $this->workspace);
+    $onB = mcpAccessToken($this->user, $clientId, $workspaceB);
+
+    $this->actingAs($this->user)
+        ->delete(route('app.mcp.disconnect', ['client' => $clientId]))
+        ->assertRedirect()
+        ->assertSessionHas('flash.success');
+
+    expect($onA->fresh()->revoked)->toBeTrue()
+        ->and($onB->fresh()->revoked)->toBeFalse();
+
+    $this->user->update(['current_workspace_id' => $workspaceB->id]);
+
+    $this->actingAs($this->user->fresh())
+        ->get(route('app.mcp.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->has('connectedClients', 1)
+            ->where('connectedClients.0.client_id', $clientId));
+});
+
 it('requires authentication', function (): void {
     $this->get(route('app.mcp.index'))->assertRedirect();
 });

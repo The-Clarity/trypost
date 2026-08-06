@@ -355,6 +355,49 @@ test('mcp oauth uses its bound workspace even when the user switched current wor
     expect($issued['token']->fresh()->workspace_id)->toBe($this->workspace->id);
 });
 
+test('same mcp client can stay connected to two workspaces independently', function () {
+    subscribeAccount($this->user->account);
+
+    $workspaceB = Workspace::factory()->create([
+        'account_id' => $this->user->account_id,
+        'user_id' => $this->user->id,
+    ]);
+    $workspaceB->members()->attach($this->user->id, ['role' => Role::Admin->value]);
+
+    $clientId = mcpOauthClient('Claude');
+    $onA = mcpBearerToken($this->user, $this->workspace);
+    $onB = mcpBearerToken($this->user, $workspaceB);
+
+    $onA['token']->forceFill(['client_id' => $clientId])->saveQuietly();
+    $onB['token']->forceFill(['client_id' => $clientId])->saveQuietly();
+
+    $payload = [
+        'jsonrpc' => '2.0',
+        'id' => 1,
+        'method' => 'initialize',
+        'params' => [
+            'protocolVersion' => '2025-03-26',
+            'capabilities' => (object) [],
+            'clientInfo' => ['name' => 'Pest', 'version' => '1.0'],
+        ],
+    ];
+
+    $this->withHeaders([
+        'Authorization' => "Bearer {$onA['plain_token']}",
+        'Accept' => 'application/json, text/event-stream',
+    ])->postJson(route('mcp.trypost'), $payload)->assertSuccessful();
+
+    $this->withHeaders([
+        'Authorization' => "Bearer {$onB['plain_token']}",
+        'Accept' => 'application/json, text/event-stream',
+    ])->postJson(route('mcp.trypost'), $payload)->assertSuccessful();
+
+    expect($onA['token']->fresh()->revoked)->toBeFalse()
+        ->and($onA['token']->fresh()->workspace_id)->toBe($this->workspace->id)
+        ->and($onB['token']->fresh()->revoked)->toBeFalse()
+        ->and($onB['token']->fresh()->workspace_id)->toBe($workspaceB->id);
+});
+
 test('rejects mcp oauth bound to a workspace the user no longer belongs to', function () {
     subscribeAccount($this->user->account);
 

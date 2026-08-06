@@ -60,6 +60,28 @@ test('list api keys excludes revoked and other-workspace tokens', function () {
         ->assertJsonMissing(['id' => $other->id]);
 });
 
+test('list api keys excludes workspace-bound mcp oauth grants', function () {
+    $result = createApiKeyApiToken();
+    $oauth = mcpAccessToken($result['user'], mcpOauthClient('Claude'), $result['workspace']);
+
+    $this->withHeaders(['Authorization' => 'Bearer '.$result['plain_token']])
+        ->getJson(route('api.api-keys.index'))
+        ->assertOk()
+        ->assertJsonCount(1)
+        ->assertJsonMissing(['id' => $oauth->id]);
+});
+
+test('cannot delete a workspace-bound mcp oauth grant through the api', function () {
+    $result = createApiKeyApiToken();
+    $oauth = mcpAccessToken($result['user'], mcpOauthClient('Claude'), $result['workspace']);
+
+    $this->withHeaders(['Authorization' => 'Bearer '.$result['plain_token']])
+        ->deleteJson(route('api.api-keys.destroy', $oauth->id))
+        ->assertNotFound();
+
+    expect($oauth->fresh()->revoked)->toBeFalse();
+});
+
 test('create api key returns plain token', function () {
     $result = createApiKeyApiToken();
 
