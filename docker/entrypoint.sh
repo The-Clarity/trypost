@@ -125,7 +125,9 @@ fi
 # so storage and bootstrap/cache must be writable by that user — Laravel
 # needs to write session files, view cache, log files, etc.
 if [ "${TARGET}" = "production" ]; then
-    chown -R www-data:www-data storage bootstrap/cache
+    if [ "$(id -u)" = "0" ]; then
+        chown -R www-data:www-data storage bootstrap/cache
+    fi
 else
     # Dev: ensure UID-mapped user owns runtime dirs.
     APP_UID="${UID:-1000}"

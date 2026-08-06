@@ -184,7 +184,9 @@ COPY docker/nginx.conf /etc/nginx/http.d/default.conf
 COPY docker/php.prod.ini /usr/local/etc/php/conf.d/99-trypost.ini
 COPY docker/supervisord.prod.conf /etc/supervisor/conf.d/supervisord.conf
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh \
+    && sed -i 's/listen 80;/listen 8081;/; s/listen \[::\]:80;/listen [::]:8081;/' \
+        /etc/nginx/http.d/default.conf
 
 # Application source + generated wayfinder TS + built assets — all from
 # asset-build (the merged stage that ran php artisan wayfinder:generate,
@@ -199,14 +201,24 @@ COPY --from=asset-build /var/www/html /var/www/html
 RUN rm -rf /var/www/html/vendor /var/www/html/bootstrap/cache/*.php
 COPY --from=composer-deps-prod /var/www/html/vendor /var/www/html/vendor
 
+RUN mkdir -p /var/lib/nginx /var/log/nginx /run/nginx \
+    && chown -R www-data:www-data \
+        /var/www/html/storage \
+        /var/www/html/bootstrap/cache \
+        /var/lib/nginx \
+        /var/log/nginx \
+        /run/nginx
+
 RUN composer dump-autoload --optimize --classmap-authoritative --no-scripts \
     && chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
 
+USER www-data
+
 ENV TRYPOST_TARGET=production
 
-EXPOSE 80 8080
+EXPOSE 8080 8081
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
-    CMD curl -fsS http://127.0.0.1/up || exit 1
+    CMD curl -fsS http://127.0.0.1:8081/up || exit 1
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
