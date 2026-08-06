@@ -41,7 +41,6 @@ class RecoverStuckPosts extends Command
                 $enabledPlatforms = $post->postPlatforms()->where('enabled', true)->get();
                 $total = $enabledPlatforms->count();
                 $publishedCount = $enabledPlatforms->where('status', PlatformStatus::Published)->count();
-                $failedCount = $enabledPlatforms->where('status', PlatformStatus::Failed)->count();
 
                 if ($publishedCount === $total) {
                     $post->markAsPublished();
