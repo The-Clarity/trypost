@@ -234,6 +234,14 @@ return [
             'minProcesses' => 1,
             'maxProcesses' => 3,
             'timeout' => 930,
+            'maxTime' => 0,
+            'maxJobs' => 0,
+            'memory' => 256,
+            'tries' => 1,
+            'nice' => 0,
+        ],
+
+        'ai-assistant' => [
             'connection' => 'redis',
             'queue' => ['ai'],
             'balance' => 'auto',
