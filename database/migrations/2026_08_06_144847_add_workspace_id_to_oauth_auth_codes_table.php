@@ -25,9 +25,4 @@ return new class extends Migration
             $table->dropConstrainedForeignId('workspace_id');
         });
     }
-
-    public function getConnection(): ?string
-    {
-        return $this->connection ?? config('passport.connection');
-    }
 };
