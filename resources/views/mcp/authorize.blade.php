@@ -69,34 +69,39 @@
             <!-- Content -->
             <div class="p-6 pt-0 space-y-4">
                 <!-- User Info -->
-                <div class="rounded-lg border p-4 bg-muted/50 space-y-3">
+                <div class="rounded-lg border p-4 bg-muted/50 space-y-4">
                     <div>
-                        <p class="text-sm text-muted-foreground mb-2">{{ __('mcp.authorize.logged_in_as') }}</p>
+                        <p class="text-sm text-muted-foreground mb-1.5">{{ __('mcp.authorize.logged_in_as') }}</p>
                         <p class="font-medium">{{ $user->email }}</p>
                     </div>
                     @if(($workspaces ?? collect())->isNotEmpty())
                         <div>
-                            <label for="workspace_id" class="text-sm text-muted-foreground mb-2 block">{{ __('mcp.authorize.workspace') }}</label>
-                            <select
-                                id="workspace_id"
-                                name="workspace_id"
-                                form="authorizeForm"
-                                dusk="mcp-authorize-workspace"
-                                class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                            >
-                                @foreach($workspaces as $option)
-                                    <option value="{{ $option->id }}" @selected(($workspace->id ?? null) === $option->id)>
-                                        {{ $option->name }}
-                                    </option>
-                                @endforeach
-                            </select>
-                            <p class="text-xs text-muted-foreground mt-1">{{ __('mcp.authorize.workspace_scope') }}</p>
+                            <label for="workspace_id" class="text-sm text-muted-foreground mb-1.5 block">{{ __('mcp.authorize.workspace') }}</label>
+                            <div class="relative">
+                                <select
+                                    id="workspace_id"
+                                    name="workspace_id"
+                                    form="authorizeForm"
+                                    dusk="mcp-authorize-workspace"
+                                    class="h-10 w-full min-w-0 cursor-pointer appearance-none rounded-md border-2 border-foreground bg-card px-3 py-2 pr-9 text-sm font-medium text-foreground shadow-xs outline-none transition-[color,box-shadow] focus-visible:ring-[3px] focus-visible:ring-foreground/20"
+                                >
+                                    @foreach($workspaces as $option)
+                                        <option value="{{ $option->id }}" @selected(($workspace->id ?? null) === $option->id)>
+                                            {{ $option->name }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                                <svg class="pointer-events-none absolute top-1/2 right-2.5 size-4 -translate-y-1/2 text-foreground/60" stroke="currentColor" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 9l6 6 6-6"></path>
+                                </svg>
+                            </div>
+                            <p class="text-xs text-muted-foreground mt-2.5">{{ __('mcp.authorize.workspace_scope') }}</p>
                         </div>
                     @elseif($workspace ?? null)
                         <div>
-                            <p class="text-sm text-muted-foreground mb-2">{{ __('mcp.authorize.workspace') }}</p>
+                            <p class="text-sm text-muted-foreground mb-1.5">{{ __('mcp.authorize.workspace') }}</p>
                             <p class="font-medium">{{ $workspace->name }}</p>
-                            <p class="text-xs text-muted-foreground mt-1">{{ __('mcp.authorize.workspace_scope') }}</p>
+                            <p class="text-xs text-muted-foreground mt-2.5">{{ __('mcp.authorize.workspace_scope') }}</p>
                         </div>
                     @endif
                 </div>
