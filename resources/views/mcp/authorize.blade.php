@@ -74,7 +74,25 @@
                         <p class="text-sm text-muted-foreground mb-2">{{ __('mcp.authorize.logged_in_as') }}</p>
                         <p class="font-medium">{{ $user->email }}</p>
                     </div>
-                    @if($workspace ?? null)
+                    @if(($workspaces ?? collect())->isNotEmpty())
+                        <div>
+                            <label for="workspace_id" class="text-sm text-muted-foreground mb-2 block">{{ __('mcp.authorize.workspace') }}</label>
+                            <select
+                                id="workspace_id"
+                                name="workspace_id"
+                                form="authorizeForm"
+                                dusk="mcp-authorize-workspace"
+                                class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                            >
+                                @foreach($workspaces as $option)
+                                    <option value="{{ $option->id }}" @selected(($workspace->id ?? null) === $option->id)>
+                                        {{ $option->name }}
+                                    </option>
+                                @endforeach
+                            </select>
+                            <p class="text-xs text-muted-foreground mt-1">{{ __('mcp.authorize.workspace_scope') }}</p>
+                        </div>
+                    @elseif($workspace ?? null)
                         <div>
                             <p class="text-sm text-muted-foreground mb-2">{{ __('mcp.authorize.workspace') }}</p>
                             <p class="font-medium">{{ $workspace->name }}</p>

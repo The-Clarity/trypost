@@ -12,11 +12,12 @@ use Laravel\Passport\Passport;
 use League\OAuth2\Server\Entities\AuthCodeEntityInterface;
 
 /**
- * Persists the authorizing user's current workspace on the auth code so the
- * subsequent token exchange (no browser session) can bind the access token.
+ * Persists the chosen workspace on the auth code so the subsequent token
+ * exchange (no browser session) can bind the access token.
  *
- * Always reads Auth::user() at consent time (including Passport silent
- * re-consent) — never a stale session value from a prior authorize visit.
+ * Prefers `workspace_id` from the consent form when present and valid;
+ * otherwise falls back to the authorizing user's current workspace (including
+ * Passport silent re-consent). Always resolves membership at consent time.
  */
 class AuthCodeRepository extends PassportAuthCodeRepository
 {
@@ -45,9 +46,10 @@ class AuthCodeRepository extends PassportAuthCodeRepository
             return null;
         }
 
-        $candidateId = $user->current_workspace_id
-            ? (string) $user->current_workspace_id
-            : null;
+        $requestedId = request()->input('workspace_id');
+        $candidateId = is_string($requestedId) && $requestedId !== ''
+            ? $requestedId
+            : ($user->current_workspace_id ? (string) $user->current_workspace_id : null);
 
         if ($candidateId === null) {
             return null;

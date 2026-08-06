@@ -147,6 +147,59 @@ test('auth code repository captures the authorizing user current workspace', fun
     expect($stored->workspace_id)->toBe($this->workspace->id);
 });
 
+test('auth code repository prefers workspace_id from the consent form', function () {
+    $otherWorkspace = Workspace::factory()->create([
+        'account_id' => $this->user->account_id,
+        'user_id' => $this->user->id,
+        'name' => 'Workspace B',
+    ]);
+    $otherWorkspace->members()->attach($this->user->id, ['role' => Role::Admin->value]);
+
+    // Current workspace stays A; consent form picks B.
+    $this->actingAs($this->user);
+    request()->merge(['workspace_id' => $otherWorkspace->id]);
+
+    $client = Mockery::mock(ClientEntityInterface::class);
+    $client->shouldReceive('getIdentifier')->andReturn($this->clientId);
+
+    $entity = Mockery::mock(AuthCodeEntityInterface::class);
+    $entity->shouldReceive('getIdentifier')->andReturn(Str::random(80));
+    $entity->shouldReceive('getUserIdentifier')->andReturn((string) $this->user->id);
+    $entity->shouldReceive('getClient')->andReturn($client);
+    $entity->shouldReceive('getScopes')->andReturn([]);
+    $entity->shouldReceive('getExpiryDateTime')->andReturn(now()->addMinutes(10)->toDateTimeImmutable());
+
+    app(AuthCodeRepository::class)->persistNewAuthCode($entity);
+
+    $stored = AuthCode::query()->where('client_id', $this->clientId)->first();
+
+    expect($stored->workspace_id)->toBe($otherWorkspace->id);
+    expect($this->user->fresh()->current_workspace_id)->toBe($this->workspace->id);
+});
+
+test('auth code repository rejects a consent workspace the user does not belong to', function () {
+    $foreign = Workspace::factory()->create();
+
+    $this->actingAs($this->user);
+    request()->merge(['workspace_id' => $foreign->id]);
+
+    $client = Mockery::mock(ClientEntityInterface::class);
+    $client->shouldReceive('getIdentifier')->andReturn($this->clientId);
+
+    $entity = Mockery::mock(AuthCodeEntityInterface::class);
+    $entity->shouldReceive('getIdentifier')->andReturn(Str::random(80));
+    $entity->shouldReceive('getUserIdentifier')->andReturn((string) $this->user->id);
+    $entity->shouldReceive('getClient')->andReturn($client);
+    $entity->shouldReceive('getScopes')->andReturn([]);
+    $entity->shouldReceive('getExpiryDateTime')->andReturn(now()->addMinutes(10)->toDateTimeImmutable());
+
+    app(AuthCodeRepository::class)->persistNewAuthCode($entity);
+
+    $stored = AuthCode::query()->where('client_id', $this->clientId)->first();
+
+    expect($stored->workspace_id)->toBeNull();
+});
+
 test('auth code repository uses current workspace on silent reconsent after switch', function () {
     $otherWorkspace = Workspace::factory()->create([
         'account_id' => $this->user->account_id,

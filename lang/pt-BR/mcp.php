@@ -36,7 +36,7 @@ return [
         'intro_capability' => 'Usar as funcionalidades MCP disponíveis.',
         'logged_in_as' => 'Conectado como:',
         'workspace' => 'Workspace:',
-        'workspace_scope' => 'Esta conexão terá acesso somente a este workspace.',
+        'workspace_scope' => 'Esta conexão terá acesso somente ao workspace selecionado.',
         'permissions' => 'Permissões:',
         'cancel' => 'Cancelar',
         'approve' => 'Autorizar',
