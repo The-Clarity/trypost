@@ -20,6 +20,28 @@ env:
   SESSION_DRIVER: array
 
 jobs:
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Audit locked dependencies
+        run: |
+          composer audit --locked --no-interaction
+          npm audit --audit-level=critical
+
   backend:
     runs-on: ubuntu-latest
 
