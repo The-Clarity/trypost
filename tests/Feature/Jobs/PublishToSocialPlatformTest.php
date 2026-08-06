@@ -527,6 +527,36 @@ test('publish hard-fails when platform unavailable retries are exhausted', funct
     Bus::assertNotDispatched(PublishToSocialPlatform::class);
 });
 
+test('publish skips platforms that are already failed', function () {
+    Event::fake();
+    Mail::fake();
+
+    $this->postPlatform->update([
+        'status' => PlatformStatus::Failed,
+        'error_message' => __('posts.errors.publishing_timed_out'),
+    ]);
+
+    $publisher = Mockery::mock(LinkedInPublisher::class);
+    $publisher->shouldNotReceive('publish');
+    $this->app->instance(LinkedInPublisher::class, $publisher);
+
+    (new PublishToSocialPlatform($this->postPlatform))->handle();
+
+    $this->postPlatform->refresh();
+
+    expect($this->postPlatform->status)->toBe(PlatformStatus::Failed)
+        ->and($this->postPlatform->error_message)->toBe(__('posts.errors.publishing_timed_out'));
+});
+
+test('publish job timeout leaves headroom above the pinterest media poll budget', function () {
+    expect((new PublishToSocialPlatform($this->postPlatform))->timeout)
+        ->toBeGreaterThanOrEqual(900)
+        ->and(config('horizon.defaults.social-publishing.timeout'))
+        ->toBeGreaterThan((new PublishToSocialPlatform($this->postPlatform))->timeout)
+        ->and(config('queue.connections.redis.retry_after'))
+        ->toBeGreaterThan((new PublishToSocialPlatform($this->postPlatform))->timeout);
+});
+
 test('publish to social platform updates post status when all platforms finished', function () {
     Event::fake();
 

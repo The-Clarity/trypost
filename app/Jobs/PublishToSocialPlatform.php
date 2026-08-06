@@ -41,7 +41,11 @@ class PublishToSocialPlatform implements ShouldQueue
 
     public int $tries = 1;
 
-    public int $timeout = 600; // 10 minutes — large video uploads need time
+    /**
+     * Allow download/upload headroom plus Pinterest media polling (~5 minutes).
+     * Keep Horizon social-publishing timeout and Redis retry_after above this.
+     */
+    public int $timeout = 900;
 
     /**
      * Max platform-unavailable reschedules before hard-failing (~1 hour at 10 min each).
@@ -55,10 +59,10 @@ class PublishToSocialPlatform implements ShouldQueue
 
     public function handle(): void
     {
-        // Idempotency: skip if already published (prevents duplicate posts on retry)
+        // Idempotency: skip terminal outcomes (prevents duplicate posts / revive after recover)
         $this->postPlatform->refresh();
 
-        if ($this->postPlatform->status === PostPlatformStatus::Published) {
+        if (in_array($this->postPlatform->status, [PostPlatformStatus::Published, PostPlatformStatus::Failed], true)) {
             return;
         }
 
@@ -345,7 +349,7 @@ class PublishToSocialPlatform implements ShouldQueue
 
         $this->postPlatform->refresh();
 
-        if ($this->postPlatform->status !== PostPlatformStatus::Published) {
+        if (! in_array($this->postPlatform->status, [PostPlatformStatus::Published, PostPlatformStatus::Failed], true)) {
             $this->postPlatform->markAsFailed(
                 $exception ? $this->safeFailureMessage($exception) : 'Unknown error',
                 [
