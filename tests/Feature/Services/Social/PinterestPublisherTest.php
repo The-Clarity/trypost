@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 use App\Enums\PostPlatform\ContentType;
 use App\Enums\SocialAccount\Platform;
+use App\Exceptions\PlatformUnavailableException;
+use App\Exceptions\Social\PinterestPublishException;
 use App\Exceptions\TokenExpiredException;
 use App\Models\Post;
 use App\Models\PostPlatform;
@@ -950,4 +952,174 @@ test('pinterest publisher throws exception for unsupported content type', functi
 
     expect(fn () => $this->publisher->publish($this->postPlatform))
         ->toThrow(Exception::class, 'Unsupported content type');
+});
+
+test('pinterest publisher waits through pending video processing before creating the pin', function () {
+    $this->postPlatform->update(['content_type' => ContentType::PinterestVideoPin]);
+
+    $this->post->update([
+        'media' => [[
+            'id' => 'test-media-video',
+            'path' => 'media/2026-01/video.mp4',
+            'url' => 'https://example.com/media/2026-01/video.mp4',
+            'mime_type' => 'video/mp4',
+            'original_filename' => 'video.mp4',
+        ]],
+    ]);
+
+    $s3UploadUrl = 'https://pinterest-media-upload.s3.amazonaws.com/upload';
+    $statusChecks = 0;
+
+    Http::fake(function ($request) use ($s3UploadUrl, &$statusChecks) {
+        $url = $request->url();
+
+        if (str_contains($url, '/v5/media') && $request->method() === 'POST') {
+            return Http::response([
+                'media_id' => 'media_video_pending',
+                'upload_url' => $s3UploadUrl,
+                'upload_parameters' => [],
+            ], 201);
+        }
+
+        if ($url === $s3UploadUrl) {
+            return Http::response('', 204);
+        }
+
+        if (str_contains($url, '/v5/media/media_video_pending')) {
+            $statusChecks++;
+
+            return Http::response([
+                'status' => $statusChecks < 3 ? 'processing' : 'succeeded',
+            ], 200);
+        }
+
+        if (str_contains($url, '/v5/pins')) {
+            return Http::response(['id' => 'video_pin_after_wait'], 200);
+        }
+
+        return Http::response('fake-video-content', 200);
+    });
+
+    $publisher = new class extends PinterestPublisher
+    {
+        protected function processingPollSeconds(): int
+        {
+            return 0;
+        }
+    };
+
+    $result = $publisher->publish($this->postPlatform);
+
+    expect($result['id'])->toBe('video_pin_after_wait')
+        ->and($statusChecks)->toBe(3);
+});
+
+test('pinterest publisher treats video processing timeout as platform unavailable for retry', function () {
+    $this->postPlatform->update(['content_type' => ContentType::PinterestVideoPin]);
+
+    $this->post->update([
+        'media' => [[
+            'id' => 'test-media-video',
+            'path' => 'media/2026-01/video.mp4',
+            'url' => 'https://example.com/media/2026-01/video.mp4',
+            'mime_type' => 'video/mp4',
+            'original_filename' => 'video.mp4',
+        ]],
+    ]);
+
+    $s3UploadUrl = 'https://pinterest-media-upload.s3.amazonaws.com/upload';
+
+    Http::fake(function ($request) use ($s3UploadUrl) {
+        $url = $request->url();
+
+        if (str_contains($url, '/v5/media') && $request->method() === 'POST') {
+            return Http::response([
+                'media_id' => 'media_video_timeout',
+                'upload_url' => $s3UploadUrl,
+                'upload_parameters' => [],
+            ], 201);
+        }
+
+        if ($url === $s3UploadUrl) {
+            return Http::response('', 204);
+        }
+
+        if (str_contains($url, '/v5/media/media_video_timeout')) {
+            return Http::response(['status' => 'processing'], 200);
+        }
+
+        return Http::response('fake-video-content', 200);
+    });
+
+    $publisher = new class extends PinterestPublisher
+    {
+        protected function processingMaxAttempts(): int
+        {
+            return 2;
+        }
+
+        protected function processingPollSeconds(): int
+        {
+            return 0;
+        }
+    };
+
+    expect(fn () => $publisher->publish($this->postPlatform))
+        ->toThrow(PlatformUnavailableException::class, 'Pinterest media processing timeout after 2 attempts');
+
+    Http::assertNotSent(fn ($request) => str_contains($request->url(), '/v5/pins'));
+});
+
+test('pinterest publisher fails hard when video processing reports failed', function () {
+    $this->postPlatform->update(['content_type' => ContentType::PinterestVideoPin]);
+
+    $this->post->update([
+        'media' => [[
+            'id' => 'test-media-video',
+            'path' => 'media/2026-01/video.mp4',
+            'url' => 'https://example.com/media/2026-01/video.mp4',
+            'mime_type' => 'video/mp4',
+            'original_filename' => 'video.mp4',
+        ]],
+    ]);
+
+    $s3UploadUrl = 'https://pinterest-media-upload.s3.amazonaws.com/upload';
+
+    Http::fake(function ($request) use ($s3UploadUrl) {
+        $url = $request->url();
+
+        if (str_contains($url, '/v5/media') && $request->method() === 'POST') {
+            return Http::response([
+                'media_id' => 'media_video_failed',
+                'upload_url' => $s3UploadUrl,
+                'upload_parameters' => [],
+            ], 201);
+        }
+
+        if ($url === $s3UploadUrl) {
+            return Http::response('', 204);
+        }
+
+        if (str_contains($url, '/v5/media/media_video_failed')) {
+            return Http::response([
+                'status' => 'failed',
+                'failure_code' => 'VIDEO_TOO_LONG',
+            ], 200);
+        }
+
+        return Http::response('fake-video-content', 200);
+    });
+
+    $publisher = new class extends PinterestPublisher
+    {
+        protected function processingPollSeconds(): int
+        {
+            return 0;
+        }
+    };
+
+    expect(fn () => $publisher->publish($this->postPlatform))
+        ->toThrow(PinterestPublishException::class, 'Pinterest media processing failed: VIDEO_TOO_LONG');
+
+    Http::assertNotSent(fn ($request) => str_contains($request->url(), '/v5/pins'));
 });

@@ -7,6 +7,7 @@ namespace App\Services\Social;
 use App\Enums\Media\Type as MediaType;
 use App\Enums\PostPlatform\ContentType;
 use App\Enums\SocialAccount\Platform;
+use App\Exceptions\PlatformUnavailableException;
 use App\Exceptions\Social\ErrorCategory;
 use App\Exceptions\Social\PinterestPublishException;
 use App\Models\PostPlatform;
@@ -320,8 +321,21 @@ class PinterestPublisher
         return $this->createPin($account, $payload, 'Pinterest carousel creation failed');
     }
 
-    private function waitForMediaProcessing(SocialAccount $account, string $mediaId, int $maxAttempts = 30): void
+    /**
+     * Poll until Pinterest finishes processing an uploaded video.
+     *
+     * Timeout is treated as transient (PlatformUnavailableException) so
+     * PublishToSocialPlatform can reschedule — slow processing ≠ bad media.
+     *
+     * @throws PlatformUnavailableException
+     * @throws PinterestPublishException
+     */
+    private function waitForMediaProcessing(SocialAccount $account, string $mediaId): void
     {
+        $maxAttempts = $this->processingMaxAttempts();
+        $pollSeconds = $this->processingPollSeconds();
+        $lastStatus = null;
+
         for ($i = 0; $i < $maxAttempts; $i++) {
             $response = $this->socialHttp()->withToken($account->access_token)
                 ->get($this->baseUrl."/media/{$mediaId}");
@@ -329,37 +343,62 @@ class PinterestPublisher
             if ($response->failed()) {
                 Log::warning('Pinterest media status check failed', [
                     'media_id' => $mediaId,
-                    'attempt' => $i,
+                    'attempt' => $i + 1,
+                    'status_code' => $response->status(),
                     'body' => $this->redactResponseBody($response->body()),
                 ]);
-                sleep(3);
+                sleep($pollSeconds);
 
                 continue;
             }
 
             $data = $response->json();
-            $status = data_get($data, 'status', 'unknown');
+            $lastStatus = data_get($data, 'status', 'unknown');
 
-            if ($status === 'succeeded') {
+            if ($lastStatus === 'succeeded') {
                 return;
             }
 
-            if ($status === 'failed') {
+            if ($lastStatus === 'failed') {
                 $failureCode = data_get($data, 'failure_code', 'unknown');
                 throw new PinterestPublishException(
                     userMessage: "Pinterest media processing failed: {$failureCode}",
                     category: ErrorCategory::ServerError,
                     platformErrorCode: (string) $failureCode,
+                    rawResponse: $response->body(),
                 );
             }
 
-            sleep(3);
+            sleep($pollSeconds);
         }
 
-        throw new PinterestPublishException(
-            userMessage: "Pinterest media processing timeout after {$maxAttempts} attempts",
-            category: ErrorCategory::ServerError,
+        Log::warning('Pinterest media processing timeout', [
+            'media_id' => $mediaId,
+            'attempts' => $maxAttempts,
+            'last_status' => $lastStatus,
+            'poll_seconds' => $pollSeconds,
+        ]);
+
+        throw new PlatformUnavailableException(
+            "Pinterest media processing timeout after {$maxAttempts} attempts (media_id={$mediaId}, last_status=".($lastStatus ?? 'unknown').')',
         );
+    }
+
+    /**
+     * How many times to poll an uploaded video before treating it as transient.
+     * Default: 60 × 5s ≈ 5 minutes (was 30 × 3s ≈ 90s — too short for Pinterest).
+     */
+    protected function processingMaxAttempts(): int
+    {
+        return 60;
+    }
+
+    /**
+     * Seconds to wait between video processing status checks.
+     */
+    protected function processingPollSeconds(): int
+    {
+        return 5;
     }
 
     /**

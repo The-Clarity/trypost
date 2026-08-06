@@ -23,6 +23,7 @@ use App\Models\Workspace;
 use App\Services\Social\ConnectionVerifier;
 use App\Services\Social\LinkedInPagePublisher;
 use App\Services\Social\LinkedInPublisher;
+use App\Services\Social\PinterestPublisher;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Event;
@@ -277,6 +278,47 @@ test('publish reschedules platform unavailable retry via Bus dispatch (not marke
 
     Bus::assertDispatched(PublishToSocialPlatform::class, function ($job) {
         return $job->postPlatform->id === $this->postPlatform->id;
+    });
+});
+
+test('publish reschedules when pinterest video processing times out', function () {
+    Bus::fake([PublishToSocialPlatform::class]);
+    Event::fake();
+    Mail::fake();
+
+    $pinterestAccount = SocialAccount::factory()->pinterest()->create([
+        'workspace_id' => $this->workspace->id,
+        'meta' => ['default_board_id' => 'board_123'],
+    ]);
+
+    $postPlatform = PostPlatform::factory()->pinterest()->create([
+        'post_id' => $this->post->id,
+        'social_account_id' => $pinterestAccount->id,
+        'platform' => Platform::Pinterest,
+        'content_type' => ContentType::PinterestVideoPin,
+        'enabled' => true,
+        'status' => PlatformStatus::Pending,
+        'meta' => ['board_id' => 'board_123'],
+    ]);
+
+    $publisher = Mockery::mock(PinterestPublisher::class);
+    $publisher->shouldReceive('publish')->andThrow(
+        new PlatformUnavailableException(
+            'Pinterest media processing timeout after 60 attempts (media_id=media_abc, last_status=processing)'
+        )
+    );
+    $this->app->instance(PinterestPublisher::class, $publisher);
+
+    (new PublishToSocialPlatform($postPlatform))->handle();
+
+    $postPlatform->refresh();
+
+    expect($postPlatform->status)->toBe(PlatformStatus::Retrying)
+        ->and($postPlatform->error_context['category'] ?? null)->toBe('platform_unavailable')
+        ->and($postPlatform->error_message)->toContain('Pinterest media processing timeout');
+
+    Bus::assertDispatched(PublishToSocialPlatform::class, function ($job) use ($postPlatform) {
+        return $job->postPlatform->id === $postPlatform->id;
     });
 });
 
