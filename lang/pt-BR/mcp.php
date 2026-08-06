@@ -29,7 +29,7 @@ return [
     'connector_name' => 'TryPost',
 
     'authorize' => [
-        'page_title' => 'Autorizar aplicativo - :app',
+        'page_title' => 'Autorizar aplicativo - TryPost',
         'app_title' => 'Autorizar MCP',
         'heading' => 'Autorizar :client',
         'intro' => 'Este aplicativo poderá:',

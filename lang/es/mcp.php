@@ -29,7 +29,7 @@ return [
     'connector_name' => 'TryPost',
 
     'authorize' => [
-        'page_title' => 'Authorize Application - :app',
+        'page_title' => 'Authorize Application - TryPost',
         'app_title' => 'Authorize MCP',
         'heading' => 'Authorize :client',
         'intro' => 'This application will be able to:',

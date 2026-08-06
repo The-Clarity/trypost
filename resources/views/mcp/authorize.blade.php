@@ -29,7 +29,7 @@
         }
     </style>
 
-    <title>{{ __('mcp.authorize.page_title', ['app' => config('app.name', 'MCP Server')]) }}</title>
+    <title>{{ __('mcp.authorize.page_title') }}</title>
 
     <link rel="icon" type="image/png" href="/favicon-96x96.png" sizes="96x96" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
