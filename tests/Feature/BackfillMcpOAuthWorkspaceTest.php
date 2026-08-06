@@ -2,10 +2,18 @@
 
 declare(strict_types=1);
 
-use App\Actions\AccessToken\BackfillMcpOAuthWorkspaces;
 use App\Enums\UserWorkspace\Role;
 use App\Models\User;
 use App\Models\Workspace;
+
+/**
+ * Load the data migration as an instance so its up() can run against rows that
+ * still have unbound MCP OAuth grants.
+ */
+function backfillMcpOAuthTokenWorkspacesMigration(): object
+{
+    return require database_path('migrations/2026_08_06_144848_backfill_mcp_oauth_token_workspaces.php');
+}
 
 test('backfill binds mcp oauth tokens to the users current workspace', function () {
     $user = User::factory()->create();
@@ -16,14 +24,12 @@ test('backfill binds mcp oauth tokens to the users current workspace', function 
     $workspace->members()->attach($user->id, ['role' => Role::Admin->value]);
     $user->update(['current_workspace_id' => $workspace->id]);
 
-    $clientId = mcpOauthClient();
-    $token = mcpAccessToken($user, $clientId, workspace: null);
+    $token = mcpAccessToken($user, mcpOauthClient(), workspace: null);
 
-    $result = BackfillMcpOAuthWorkspaces::execute();
+    backfillMcpOAuthTokenWorkspacesMigration()->up();
 
-    expect($result['bound'])->toBe(1);
-    expect($result['revoked'])->toBe(0);
-    expect($token->refresh()->workspace_id)->toBe($workspace->id);
+    expect($token->refresh()->workspace_id)->toBe($workspace->id)
+        ->and($token->refresh()->revoked)->toBeFalse();
 });
 
 test('backfill falls back to the first account workspace when current is missing', function () {
@@ -35,12 +41,10 @@ test('backfill falls back to the first account workspace when current is missing
     $workspace->members()->attach($user->id, ['role' => Role::Admin->value]);
     $user->update(['current_workspace_id' => null]);
 
-    $clientId = mcpOauthClient();
-    $token = mcpAccessToken($user, $clientId, workspace: null);
+    $token = mcpAccessToken($user, mcpOauthClient(), workspace: null);
 
-    $result = BackfillMcpOAuthWorkspaces::execute();
+    backfillMcpOAuthTokenWorkspacesMigration()->up();
 
-    expect($result['bound'])->toBe(1);
     expect($token->refresh()->workspace_id)->toBe($workspace->id);
 });
 
@@ -48,15 +52,12 @@ test('backfill revokes tokens that cannot be mapped to a workspace', function ()
     $user = User::factory()->create();
     $user->update(['current_workspace_id' => null]);
 
-    $clientId = mcpOauthClient();
-    $token = mcpAccessToken($user, $clientId, workspace: null);
+    $token = mcpAccessToken($user, mcpOauthClient(), workspace: null);
 
-    $result = BackfillMcpOAuthWorkspaces::execute();
+    backfillMcpOAuthTokenWorkspacesMigration()->up();
 
-    expect($result['bound'])->toBe(0);
-    expect($result['revoked'])->toBe(1);
-    expect($token->refresh()->revoked)->toBeTrue();
-    expect($token->refresh()->workspace_id)->toBeNull();
+    expect($token->refresh()->revoked)->toBeTrue()
+        ->and($token->refresh()->workspace_id)->toBeNull();
 });
 
 test('backfill ignores personal access tokens with null workspace', function () {
@@ -65,12 +66,10 @@ test('backfill ignores personal access tokens with null workspace', function () 
     $token = $result->token;
     $token->forceFill(['workspace_id' => null])->saveQuietly();
 
-    $stats = BackfillMcpOAuthWorkspaces::execute();
+    backfillMcpOAuthTokenWorkspacesMigration()->up();
 
-    expect($stats['bound'])->toBe(0);
-    expect($stats['revoked'])->toBe(0);
-    expect($token->fresh()->revoked)->toBeFalse();
-    expect($token->fresh()->workspace_id)->toBeNull();
+    expect($token->fresh()->revoked)->toBeFalse()
+        ->and($token->fresh()->workspace_id)->toBeNull();
 });
 
 test('backfill falls back when current workspace membership was removed', function () {
@@ -86,11 +85,9 @@ test('backfill falls back when current workspace membership was removed', functi
     $fallback->members()->attach($user->id, ['role' => Role::Admin->value]);
     $user->update(['current_workspace_id' => $current->id]);
 
-    $clientId = mcpOauthClient();
-    $token = mcpAccessToken($user, $clientId, workspace: null);
+    $token = mcpAccessToken($user, mcpOauthClient(), workspace: null);
 
-    $result = BackfillMcpOAuthWorkspaces::execute();
+    backfillMcpOAuthTokenWorkspacesMigration()->up();
 
-    expect($result['bound'])->toBe(1);
     expect($token->refresh()->workspace_id)->toBe($fallback->id);
 });
