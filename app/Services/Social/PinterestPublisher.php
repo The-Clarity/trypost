@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Social;
 
 use App\Enums\Media\Type as MediaType;
+use App\Enums\Pinterest\MediaUploadStatus;
 use App\Enums\PostPlatform\ContentType;
 use App\Enums\SocialAccount\Platform;
 use App\Exceptions\PlatformUnavailableException;
@@ -356,13 +357,13 @@ class PinterestPublisher
             }
 
             $data = $response->json();
-            $lastStatus = data_get($data, 'status', 'unknown');
+            $lastStatus = MediaUploadStatus::tryFrom((string) data_get($data, 'status', ''));
 
-            if ($lastStatus === 'succeeded') {
+            if ($lastStatus === MediaUploadStatus::Succeeded) {
                 return;
             }
 
-            if ($lastStatus === 'failed') {
+            if ($lastStatus === MediaUploadStatus::Failed) {
                 $failureCode = data_get($data, 'failure_code', 'unknown');
                 throw new PinterestPublishException(
                     userMessage: "Pinterest media processing failed: {$failureCode}",
@@ -378,12 +379,12 @@ class PinterestPublisher
         Log::warning('Pinterest media processing timeout', [
             'media_id' => $mediaId,
             'attempts' => $maxAttempts,
-            'last_status' => $lastStatus,
+            'last_status' => $lastStatus?->value,
             'poll_seconds' => $pollSeconds,
         ]);
 
         throw new PlatformUnavailableException(
-            "Pinterest media processing timeout after {$maxAttempts} attempts (media_id={$mediaId}, last_status=".($lastStatus ?? 'unknown').')',
+            "Pinterest media processing timeout after {$maxAttempts} attempts (media_id={$mediaId}, last_status=".($lastStatus?->value ?? 'unknown').')',
         );
     }
 
