@@ -13,6 +13,7 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  TRIVY_VERSION: 0.72.0
 
 jobs:
   build:
@@ -24,8 +25,10 @@ jobs:
         include:
           - platform: linux/amd64
             runner: ubuntu-latest
+            trivy-arch: 64bit
           - platform: linux/arm64
             runner: ubuntu-24.04-arm
+            trivy-arch: ARM64
     permissions:
       contents: read
       packages: write
@@ -65,9 +68,26 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             VITE_REVERB_APP_KEY=trypost-reverb-key
+            VITE_REVERB_HOST=trypost.theclarity.us
+            VITE_REVERB_PORT=443
+            VITE_REVERB_SCHEME=https
           cache-from: type=gha,scope=${{ env.PLATFORM_PAIR }}
           cache-to: type=gha,mode=max,scope=${{ env.PLATFORM_PAIR }}
+          provenance: mode=max
+          sbom: true
           outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
+
+      - name: Install verified Trivy binary
+        run: |
+          archive="trivy_${TRIVY_VERSION}_Linux-${{ matrix.trivy-arch }}.tar.gz"
+          curl -fsSLO "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/${archive}"
+          curl -fsSLO "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_checksums.txt"
+          grep " ${archive}$" "trivy_${TRIVY_VERSION}_checksums.txt" | sha256sum -c -
+          tar -xzf "${archive}" trivy
+          sudo install -m 0755 trivy /usr/local/bin/trivy
+
+      - name: Reject fixable critical vulnerabilities
+        run: trivy image --exit-code 1 --severity CRITICAL --ignore-unfixed "${REGISTRY}/${IMAGE_NAME}@${{ steps.build.outputs.digest }}"
 
       - name: Export digest
         run: |
