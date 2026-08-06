@@ -29,13 +29,13 @@
         }
     </style>
 
-    <title>{{ __('mcp.authorize_page_title', ['app' => config('app.name', 'MCP Server')]) }}</title>
+    <title>{{ __('mcp.authorize.page_title', ['app' => config('app.name', 'MCP Server')]) }}</title>
 
     <link rel="icon" type="image/png" href="/favicon-96x96.png" sizes="96x96" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="shortcut icon" href="/favicon.ico" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
-    <meta name="apple-mobile-web-app-title" content="{{ __('mcp.authorize_app_title') }}" />
+    <meta name="apple-mobile-web-app-title" content="{{ __('mcp.authorize.app_title') }}" />
     <link rel="manifest" href="/site.webmanifest" />
 
     <link rel="preconnect" href="https://fonts.bunny.net">
@@ -58,11 +58,11 @@
                 </div>
 
                 <h3 class="text-2xl font-semibold leading-none tracking-tight text-center">
-                    {{ __('mcp.authorize_heading', ['client' => $client->name]) }}
+                    {{ __('mcp.authorize.heading', ['client' => $client->name]) }}
                 </h3>
 
                 <p class="text-sm text-muted-foreground text-center">
-                    {{ __('mcp.authorize_intro') }}<br/>{{ __('mcp.authorize_intro_capability') }}
+                    {{ __('mcp.authorize.intro') }}<br/>{{ __('mcp.authorize.intro_capability') }}
                 </p>
             </div>
 
@@ -71,14 +71,14 @@
                 <!-- User Info -->
                 <div class="rounded-lg border p-4 bg-muted/50 space-y-3">
                     <div>
-                        <p class="text-sm text-muted-foreground mb-2">{{ __('mcp.authorize_logged_in_as') }}</p>
+                        <p class="text-sm text-muted-foreground mb-2">{{ __('mcp.authorize.logged_in_as') }}</p>
                         <p class="font-medium">{{ $user->email }}</p>
                     </div>
                     @if($workspace ?? null)
                         <div>
-                            <p class="text-sm text-muted-foreground mb-2">{{ __('mcp.authorize_workspace') }}</p>
+                            <p class="text-sm text-muted-foreground mb-2">{{ __('mcp.authorize.workspace') }}</p>
                             <p class="font-medium">{{ $workspace->name }}</p>
-                            <p class="text-xs text-muted-foreground mt-1">{{ __('mcp.authorize_workspace_scope') }}</p>
+                            <p class="text-xs text-muted-foreground mt-1">{{ __('mcp.authorize.workspace_scope') }}</p>
                         </div>
                     @endif
                 </div>
@@ -86,7 +86,7 @@
                 <!-- Scopes / Permissions -->
                 @if(count($scopes) > 0)
                     <div class="space-y-2">
-                        <p class="text-sm font-medium">{{ __('mcp.authorize_permissions') }}</p>
+                        <p class="text-sm font-medium">{{ __('mcp.authorize.permissions') }}</p>
 
                         <ul class="space-y-2">
                             @foreach($scopes as $scope)
@@ -95,7 +95,7 @@
                                         <div class="h-1.5 w-1.5 rounded-full bg-primary"></div>
                                     </div>
                                     <span class="text-sm text-muted-foreground">
-                                        {{ $scope->id === 'mcp:use' ? __('mcp.scope_mcp_use') : $scope->description }}
+                                        {{ $scope->id === 'mcp:use' ? __('mcp.authorize.scope_mcp_use') : $scope->description }}
                                     </span>
                                 </li>
                             @endforeach
@@ -117,7 +117,7 @@
                         <svg class="mr-2 h-4 w-4" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                         </svg>
-                        {{ __('mcp.authorize_cancel') }}
+                        {{ __('mcp.authorize.cancel') }}
                     </button>
                 </form>
 
@@ -128,7 +128,7 @@
                     <input type="hidden" name="client_id" value="{{ $client->id }}">
                     <input type="hidden" name="auth_token" value="{{ $authToken }}">
                     <button type="submit" class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2 w-full" id="authorizeButton">
-                        <span id="authorizeText">{{ __('mcp.authorize_approve') }}</span>
+                        <span id="authorizeText">{{ __('mcp.authorize.approve') }}</span>
 
                         <svg id="loadingSpinner" class="animate-spin -ml-1 mr-3 h-4 w-4 text-white hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -147,7 +147,7 @@
         const button = document.getElementById('authorizeButton');
         const authorizeText = document.getElementById('authorizeText');
         const loadingSpinner = document.getElementById('loadingSpinner');
-        const authorizingLabel = @json(__('mcp.authorize_approving'));
+        const authorizingLabel = @json(__('mcp.authorize.approving'));
 
         form.addEventListener('submit', function(e) {
             // Show loading state...

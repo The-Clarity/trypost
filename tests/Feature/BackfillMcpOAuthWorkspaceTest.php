@@ -91,3 +91,26 @@ test('backfill falls back when current workspace membership was removed', functi
 
     expect($token->refresh()->workspace_id)->toBe($fallback->id);
 });
+
+test('backfill rolls back binds when the migration fails before commit', function () {
+    $user = User::factory()->create();
+    $workspace = Workspace::factory()->create([
+        'account_id' => $user->account_id,
+        'user_id' => $user->id,
+    ]);
+    $workspace->members()->attach($user->id, ['role' => Role::Admin->value]);
+    $user->update(['current_workspace_id' => $workspace->id]);
+
+    $token = mcpAccessToken($user, mcpOauthClient(), workspace: null);
+
+    $migration = backfillMcpOAuthTokenWorkspacesMigration();
+    $migration->beforeCommit = function (): void {
+        throw new RuntimeException('forced backfill failure');
+    };
+
+    expect(fn () => $migration->up())
+        ->toThrow(RuntimeException::class, 'forced backfill failure');
+
+    expect($token->fresh()->workspace_id)->toBeNull()
+        ->and($token->fresh()->revoked)->toBeFalse();
+});

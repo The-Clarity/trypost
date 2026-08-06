@@ -65,11 +65,11 @@ test('mcp oauth consent view is available for workspace viewers', function () {
     ])->render();
 
     expect($html)
-        ->toContain(__('mcp.authorize_heading', ['client' => 'Viewer Agent']))
+        ->toContain(__('mcp.authorize.heading', ['client' => 'Viewer Agent']))
         ->toContain($viewer->email)
         ->toContain($workspace->name)
-        ->toContain(__('mcp.authorize_workspace_scope'))
-        ->toContain(__('mcp.scope_mcp_use'))
+        ->toContain(__('mcp.authorize.workspace_scope'))
+        ->toContain(__('mcp.authorize.scope_mcp_use'))
         ->and(view()->exists('mcp.authorize-denied'))->toBeFalse()
         ->and(class_exists(EnsureCanAuthorizeMcp::class))->toBeFalse();
 });

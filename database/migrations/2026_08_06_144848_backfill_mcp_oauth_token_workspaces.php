@@ -17,6 +17,13 @@ use Illuminate\Support\Facades\DB;
  */
 return new class extends Migration
 {
+    /**
+     * Test seam: invoked after all chunks and before commit.
+     *
+     * @var (callable(): void)|null
+     */
+    public $beforeCommit = null;
+
     public function up(): void
     {
         DB::beginTransaction();
@@ -60,8 +67,12 @@ return new class extends Migration
                     }
                 });
 
+            if (is_callable($this->beforeCommit)) {
+                ($this->beforeCommit)();
+            }
+
             DB::commit();
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             DB::rollBack();
 
             throw $e;
