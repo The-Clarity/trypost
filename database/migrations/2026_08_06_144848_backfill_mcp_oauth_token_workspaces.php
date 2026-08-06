@@ -14,8 +14,10 @@ use Illuminate\Support\Facades\DB;
  * them when no confident mapping exists. Runs in a single transaction so a
  * failure leaves no partially backfilled rows.
  *
- * Targets the same population as AccessToken::mcpOAuth() (mcp:use, non-PAT
- * client), limited to non-revoked rows still missing a workspace.
+ * Only touches live/recoverable MCP sessions (AccessToken::connectedMcpOAuth).
+ * Workspace mapping is conservative: a single membership binds automatically;
+ * multiple memberships bind only when current_workspace_id is still valid —
+ * otherwise the grant is revoked so the client reconnects deliberately.
  */
 return new class extends Migration
 {
@@ -32,9 +34,8 @@ return new class extends Migration
 
         try {
             AccessToken::query()
-                ->mcpOAuth()
+                ->connectedMcpOAuth()
                 ->whereNull('workspace_id')
-                ->where('revoked', false)
                 ->orderBy('id')
                 ->chunkById(100, function (Collection $tokens): void {
                     $users = User::query()
@@ -96,14 +97,16 @@ return new class extends Migration
             return null;
         }
 
-        if ($user->current_workspace_id) {
-            $current = $accountWorkspaces->firstWhere('id', $user->current_workspace_id);
-
-            if ($current) {
-                return (string) $current->id;
-            }
+        if ($accountWorkspaces->count() === 1) {
+            return (string) $accountWorkspaces->first()->id;
         }
 
-        return (string) $accountWorkspaces->first()->id;
+        if (! $user->current_workspace_id) {
+            return null;
+        }
+
+        $current = $accountWorkspaces->firstWhere('id', $user->current_workspace_id);
+
+        return $current ? (string) $current->id : null;
     }
 };
