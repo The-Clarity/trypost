@@ -72,6 +72,23 @@ test('backfill ignores personal access tokens with null workspace', function () 
         ->and($token->fresh()->workspace_id)->toBeNull();
 });
 
+test('backfill ignores oauth tokens without the mcp use scope', function () {
+    $user = User::factory()->create();
+    $workspace = Workspace::factory()->create([
+        'account_id' => $user->account_id,
+        'user_id' => $user->id,
+    ]);
+    $workspace->members()->attach($user->id, ['role' => Role::Admin->value]);
+    $user->update(['current_workspace_id' => $workspace->id]);
+
+    $token = mcpAccessToken($user, mcpOauthClient(), workspace: null, scopes: []);
+
+    backfillMcpOAuthTokenWorkspacesMigration()->up();
+
+    expect($token->fresh()->workspace_id)->toBeNull()
+        ->and($token->fresh()->revoked)->toBeFalse();
+});
+
 test('backfill falls back when current workspace membership was removed', function () {
     $user = User::factory()->create();
     $current = Workspace::factory()->create([

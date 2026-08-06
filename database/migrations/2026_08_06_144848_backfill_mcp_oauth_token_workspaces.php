@@ -5,7 +5,6 @@ declare(strict_types=1);
 use App\Actions\AccessToken\RevokeAccessTokens;
 use App\Models\AccessToken;
 use App\Models\User;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -14,6 +13,9 @@ use Illuminate\Support\Facades\DB;
  * Assign existing MCP OAuth tokens (workspace_id null) to a workspace, or revoke
  * them when no confident mapping exists. Runs in a single transaction so a
  * failure leaves no partially backfilled rows.
+ *
+ * Targets the same population as AccessToken::mcpOAuth() (mcp:use, non-PAT
+ * client), limited to non-revoked rows still missing a workspace.
  */
 return new class extends Migration
 {
@@ -30,14 +32,9 @@ return new class extends Migration
 
         try {
             AccessToken::query()
+                ->mcpOAuth()
                 ->whereNull('workspace_id')
                 ->where('revoked', false)
-                ->whereHas(
-                    'client',
-                    fn (Builder $client): Builder => $client
-                        ->where('revoked', false)
-                        ->whereJsonDoesntContain('grant_types', 'personal_access'),
-                )
                 ->orderBy('id')
                 ->chunkById(100, function (Collection $tokens): void {
                     $users = User::query()
