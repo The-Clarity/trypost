@@ -15,7 +15,6 @@ use Laravel\Passport\Events\AccessTokenCreated;
 use League\OAuth2\Server\Entities\AuthCodeEntityInterface;
 use League\OAuth2\Server\Entities\ClientEntityInterface;
 use League\OAuth2\Server\Exception\OAuthServerException;
-use Mockery;
 
 beforeEach(function () {
     $this->user = User::factory()->create();
