@@ -328,13 +328,15 @@ class PinterestPublisher
      * Timeout is treated as transient (PlatformUnavailableException) so
      * PublishToSocialPlatform can reschedule — slow processing ≠ bad media.
      *
+     * Default budget: 60 × 5s ≈ 5 minutes (was 30 × 3s ≈ 90s — too short for Pinterest).
+     *
      * @throws PlatformUnavailableException
      * @throws PinterestPublishException
      */
     private function waitForMediaProcessing(SocialAccount $account, string $mediaId): void
     {
-        $maxAttempts = $this->processingMaxAttempts();
-        $pollSeconds = $this->processingPollSeconds();
+        $maxAttempts = 60;
+        $pollSeconds = 5;
         $lastStatus = null;
 
         for ($i = 0; $i < $maxAttempts; $i++) {
@@ -383,23 +385,6 @@ class PinterestPublisher
         throw new PlatformUnavailableException(
             "Pinterest media processing timeout after {$maxAttempts} attempts (media_id={$mediaId}, last_status=".($lastStatus ?? 'unknown').')',
         );
-    }
-
-    /**
-     * How many times to poll an uploaded video before treating it as transient.
-     * Default: 60 × 5s ≈ 5 minutes (was 30 × 3s ≈ 90s — too short for Pinterest).
-     */
-    protected function processingMaxAttempts(): int
-    {
-        return 60;
-    }
-
-    /**
-     * Seconds to wait between video processing status checks.
-     */
-    protected function processingPollSeconds(): int
-    {
-        return 5;
     }
 
     /**

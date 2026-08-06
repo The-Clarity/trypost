@@ -1050,19 +1050,11 @@ test('pinterest publisher treats video processing timeout as platform unavailabl
         return Http::response('fake-video-content', 200);
     });
 
-    $publisher = new class extends PinterestPublisher
-    {
-        protected function processingMaxAttempts(): int
-        {
-            return 2;
-        }
-    };
-
-    expect(fn () => $publisher->publish($this->postPlatform))
-        ->toThrow(PlatformUnavailableException::class, 'Pinterest media processing timeout after 2 attempts');
+    expect(fn () => $this->publisher->publish($this->postPlatform))
+        ->toThrow(PlatformUnavailableException::class, 'Pinterest media processing timeout after 60 attempts');
 
     Http::assertNotSent(fn ($request) => str_contains($request->url(), '/v5/pins'));
-    Sleep::assertSleptTimes(2);
+    Sleep::assertSleptTimes(60);
 });
 
 test('pinterest publisher fails hard when video processing reports failed', function () {
