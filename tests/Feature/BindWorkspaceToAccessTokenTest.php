@@ -3,15 +3,15 @@
 declare(strict_types=1);
 
 use App\Enums\UserWorkspace\Role;
-use App\Listeners\BindWorkspaceToAccessToken;
 use App\Models\AccessToken;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Passport\AccessTokenRepository;
 use App\Passport\AuthCode;
 use App\Passport\AuthCodeRepository;
 use App\Passport\OAuthPayloadDecryptor;
 use Illuminate\Support\Str;
-use Laravel\Passport\Events\AccessTokenCreated;
+use League\OAuth2\Server\Entities\AccessTokenEntityInterface;
 use League\OAuth2\Server\Entities\AuthCodeEntityInterface;
 use League\OAuth2\Server\Entities\ClientEntityInterface;
 use League\OAuth2\Server\Exception\OAuthServerException;
@@ -31,6 +31,7 @@ beforeEach(function () {
 
 test('authorization code grant binds workspace from the encrypted auth code payload', function () {
     $authCodeId = Str::random(80);
+    $tokenId = Str::random(80);
 
     AuthCode::query()->forceCreate([
         'id' => $authCodeId,
@@ -50,8 +51,6 @@ test('authorization code grant binds workspace from the encrypted auth code payl
     $otherWorkspace->members()->attach($this->user->id, ['role' => Role::Admin->value]);
     $this->user->update(['current_workspace_id' => $otherWorkspace->id]);
 
-    $token = mcpAccessToken($this->user, $this->clientId, workspace: null);
-
     request()->merge([
         'grant_type' => 'authorization_code',
         'code' => $this->decryptor->encrypt([
@@ -63,17 +62,16 @@ test('authorization code grant binds workspace from the encrypted auth code payl
         ]),
     ]);
 
-    app(BindWorkspaceToAccessToken::class)->handle(new AccessTokenCreated(
-        $token->id,
-        (string) $this->user->id,
-        $this->clientId,
-    ));
+    persistAccessTokenEntity($tokenId, (string) $this->user->id, $this->clientId);
 
-    expect($token->refresh()->workspace_id)->toBe($this->workspace->id);
+    $token = AccessToken::query()->findOrFail($tokenId);
+
+    expect($token->workspace_id)->toBe($this->workspace->id);
 });
 
 test('refresh grant inherits workspace from the refreshed access token id', function () {
     $previous = mcpAccessToken($this->user, $this->clientId, $this->workspace);
+    $tokenId = Str::random(80);
 
     $otherWorkspace = Workspace::factory()->create([
         'account_id' => $this->user->account_id,
@@ -84,8 +82,6 @@ test('refresh grant inherits workspace from the refreshed access token id', func
     // Newer grant on another workspace for the same client must not win.
     mcpAccessToken($this->user, $this->clientId, $otherWorkspace);
     $this->user->update(['current_workspace_id' => $otherWorkspace->id]);
-
-    $refreshed = mcpAccessToken($this->user, $this->clientId, workspace: null);
 
     request()->merge([
         'grant_type' => 'refresh_token',
@@ -99,14 +95,12 @@ test('refresh grant inherits workspace from the refreshed access token id', func
         ]),
     ]);
 
-    app(BindWorkspaceToAccessToken::class)->handle(new AccessTokenCreated(
-        $refreshed->id,
-        (string) $this->user->id,
-        $this->clientId,
-    ));
+    persistAccessTokenEntity($tokenId, (string) $this->user->id, $this->clientId);
 
-    expect($refreshed->refresh()->workspace_id)->toBe($previous->workspace_id);
-    expect($refreshed->refresh()->workspace_id)->not->toBe($otherWorkspace->id);
+    $refreshed = AccessToken::query()->findOrFail($tokenId);
+
+    expect($refreshed->workspace_id)->toBe($previous->workspace_id)
+        ->and($refreshed->workspace_id)->not->toBe($otherWorkspace->id);
 });
 
 test('personal access tokens are left alone for controllers to bind', function () {
@@ -114,16 +108,6 @@ test('personal access tokens are left alone for controllers to bind', function (
     $token = AccessToken::query()->find($result->token->id);
 
     expect($token->workspace_id)->toBeNull();
-
-    request()->merge(['grant_type' => 'personal_access']);
-
-    app(BindWorkspaceToAccessToken::class)->handle(new AccessTokenCreated(
-        $token->id,
-        (string) $this->user->id,
-        (string) $token->client_id,
-    ));
-
-    expect($token->refresh()->workspace_id)->toBeNull();
 });
 
 test('auth code repository captures the authorizing user current workspace', function () {
@@ -248,20 +232,31 @@ test('auth code repository rejects a current workspace the user no longer belong
     expect($stored->workspace_id)->toBeNull();
 });
 
-test('oauth grant without a resolvable workspace fails the grant and revokes the token', function () {
+test('oauth grant without a resolvable workspace fails before the token is saved', function () {
     $this->user->update(['current_workspace_id' => null]);
     $this->workspace->members()->detach($this->user->id);
 
-    $token = mcpAccessToken($this->user, $this->clientId, workspace: null);
+    $tokenId = Str::random(80);
 
     request()->merge(['grant_type' => 'authorization_code']);
 
-    expect(fn () => app(BindWorkspaceToAccessToken::class)->handle(new AccessTokenCreated(
-        $token->id,
-        (string) $this->user->id,
-        $this->clientId,
-    )))->toThrow(OAuthServerException::class);
+    expect(fn () => persistAccessTokenEntity($tokenId, (string) $this->user->id, $this->clientId))
+        ->toThrow(OAuthServerException::class);
 
-    expect($token->refresh()->revoked)->toBeTrue();
-    expect($token->refresh()->workspace_id)->toBeNull();
+    expect(AccessToken::query()->find($tokenId))->toBeNull();
 });
+
+function persistAccessTokenEntity(string $tokenId, string $userId, string $clientId): void
+{
+    $client = Mockery::mock(ClientEntityInterface::class);
+    $client->shouldReceive('getIdentifier')->andReturn($clientId);
+
+    $entity = Mockery::mock(AccessTokenEntityInterface::class);
+    $entity->shouldReceive('getIdentifier')->andReturn($tokenId);
+    $entity->shouldReceive('getUserIdentifier')->andReturn($userId);
+    $entity->shouldReceive('getClient')->andReturn($client);
+    $entity->shouldReceive('getScopes')->andReturn([]);
+    $entity->shouldReceive('getExpiryDateTime')->andReturn(now()->addHour()->toDateTimeImmutable());
+
+    app(AccessTokenRepository::class)->persistNewAccessToken($entity);
+}

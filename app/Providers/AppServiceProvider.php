@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Providers;
 
-use App\Listeners\BindWorkspaceToAccessToken;
 use App\Listeners\StripeEventListener;
 use App\Models\AccessToken;
 use App\Models\Account;
@@ -30,6 +29,7 @@ use App\Models\Workspace;
 use App\Models\WorkspaceInvite;
 use App\Models\WorkspaceLabel;
 use App\Models\WorkspaceSignature;
+use App\Passport\AccessTokenRepository;
 use App\Passport\AuthCode;
 use App\Passport\AuthCodeRepository;
 use App\Services\PostHogService;
@@ -57,8 +57,8 @@ use Laravel\Cashier\Cashier;
 use Laravel\Cashier\Events\WebhookReceived;
 use Laravel\Nightwatch\Facades\Nightwatch;
 use Laravel\Nightwatch\Records\CacheEvent;
+use Laravel\Passport\Bridge\AccessTokenRepository as PassportAccessTokenRepository;
 use Laravel\Passport\Bridge\AuthCodeRepository as PassportAuthCodeRepository;
-use Laravel\Passport\Events\AccessTokenCreated;
 use Laravel\Passport\Passport;
 use Laravel\Passport\Scope;
 use Laravel\Socialite\Facades\Socialite;
@@ -80,6 +80,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(PostTemplateRegistry::class);
 
         $this->app->bind(PassportAuthCodeRepository::class, AuthCodeRepository::class);
+        $this->app->bind(PassportAccessTokenRepository::class, AccessTokenRepository::class);
 
         if ($this->app->environment('local') && class_exists(\Laravel\Telescope\TelescopeServiceProvider::class)) {
             $this->app->register(\Laravel\Telescope\TelescopeServiceProvider::class);
@@ -165,8 +166,6 @@ class AppServiceProvider extends ServiceProvider
                 'state' => (string) data_get($parameters, 'request.state', ''),
             ]);
         });
-
-        Event::listen(AccessTokenCreated::class, BindWorkspaceToAccessToken::class);
     }
 
     protected function configureMorphMap(): void

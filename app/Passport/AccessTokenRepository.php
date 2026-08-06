@@ -2,56 +2,69 @@
 
 declare(strict_types=1);
 
-namespace App\Listeners;
+namespace App\Passport;
 
-use App\Actions\AccessToken\RevokeAccessTokens;
 use App\Models\AccessToken;
 use App\Models\User;
 use App\Models\Workspace;
-use App\Passport\AuthCode;
-use App\Passport\OAuthPayloadDecryptor;
+use Illuminate\Contracts\Events\Dispatcher;
+use Laravel\Passport\Bridge\AccessTokenRepository as PassportAccessTokenRepository;
 use Laravel\Passport\Events\AccessTokenCreated;
+use Laravel\Passport\Passport;
+use League\OAuth2\Server\Entities\AccessTokenEntityInterface;
 use League\OAuth2\Server\Exception\OAuthServerException;
 
 /**
- * Bind MCP OAuth access tokens to a workspace (mirroring personal API keys).
- *
- * Authorization-code grants copy workspace_id from the auth code captured at
- * consent. Refresh grants inherit the refreshed token's workspace so switching
- * the user's current workspace cannot silently retarget an existing connection.
+ * Persists workspace_id on MCP OAuth access tokens at issue time — same seam
+ * as AuthCodeRepository for consent codes. Personal-access tokens stay null
+ * so CreateApiKey (and friends) can bind afterward.
  */
-class BindWorkspaceToAccessToken
+class AccessTokenRepository extends PassportAccessTokenRepository
 {
-    public function __construct(private OAuthPayloadDecryptor $decryptor) {}
+    public function __construct(
+        Dispatcher $events,
+        private OAuthPayloadDecryptor $decryptor,
+    ) {
+        parent::__construct($events);
+    }
 
-    public function handle(AccessTokenCreated $event): void
+    public function persistNewAccessToken(AccessTokenEntityInterface $accessTokenEntity): void
     {
-        $token = AccessToken::query()->find($event->tokenId);
+        $id = $accessTokenEntity->getIdentifier();
+        $userId = $accessTokenEntity->getUserIdentifier();
+        $clientId = $accessTokenEntity->getClient()->getIdentifier();
+        $requiresWorkspace = $this->clientRequiresWorkspace($clientId);
+        $workspaceId = $requiresWorkspace
+            ? $this->resolveWorkspaceId($userId)
+            : null;
 
-        if ($token === null || $token->workspace_id !== null) {
-            return;
-        }
-
-        $token->loadMissing('client');
-
-        if ($token->client === null || $token->client->hasGrantType('personal_access')) {
-            return;
-        }
-
-        $workspaceId = $this->resolveWorkspaceId($event);
-
-        if ($workspaceId === null) {
-            RevokeAccessTokens::execute($token);
-
+        if ($requiresWorkspace && $workspaceId === null) {
             throw OAuthServerException::invalidGrant(
                 'Unable to bind this connection to a workspace. Reconnect from a workspace you belong to.',
             );
         }
 
-        $token->forceFill(['workspace_id' => $workspaceId])->saveQuietly();
+        Passport::token()->forceFill([
+            'id' => $id,
+            'user_id' => $userId,
+            'client_id' => $clientId,
+            'workspace_id' => $workspaceId,
+            'scopes' => $accessTokenEntity->getScopes(),
+            'revoked' => false,
+            'expires_at' => $accessTokenEntity->getExpiryDateTime(),
+        ])->save();
+
+        $this->events->dispatch(new AccessTokenCreated($id, $userId, $clientId));
     }
 
-    private function resolveWorkspaceId(AccessTokenCreated $event): ?string
+    private function clientRequiresWorkspace(string $clientId): bool
+    {
+        $client = Passport::client()->newQuery()->find($clientId);
+
+        return $client !== null && ! $client->hasGrantType('personal_access');
+    }
+
+    private function resolveWorkspaceId(?string $userId): ?string
     {
         $grantType = request()->input('grant_type');
 
@@ -62,12 +75,12 @@ class BindWorkspaceToAccessToken
         if ($grantType === 'authorization_code') {
             $fromAuthCode = $this->workspaceFromAuthCode();
 
-            if ($fromAuthCode !== null && $this->userBelongsToWorkspace($event->userId, $fromAuthCode)) {
+            if ($fromAuthCode !== null && $this->userBelongsToWorkspace($userId, $fromAuthCode)) {
                 return $fromAuthCode;
             }
         }
 
-        return $this->workspaceFromUser($event->userId);
+        return $this->workspaceFromUser($userId);
     }
 
     private function workspaceFromAuthCode(): ?string
@@ -78,7 +91,6 @@ class BindWorkspaceToAccessToken
             return null;
         }
 
-        // League encrypts the redirect `code`; the DB id lives in auth_code_id.
         $payload = $this->decryptor->decrypt($code);
         $authCodeId = data_get($payload, 'auth_code_id');
 
