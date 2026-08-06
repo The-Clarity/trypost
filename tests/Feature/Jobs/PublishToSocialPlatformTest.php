@@ -274,6 +274,8 @@ test('publish reschedules platform unavailable retry via Bus dispatch (not marke
     expect($this->postPlatform->error_context['category'] ?? null)->toBe('platform_unavailable');
     expect($this->postPlatform->error_context['http_status'] ?? null)->toBe(503);
     expect($this->postPlatform->error_context['retry_count'] ?? null)->toBe(1);
+    expect($this->postPlatform->error_message)->toBe(__('posts.errors.platform_unavailable'));
+    expect($this->postPlatform->error_context['detail'] ?? null)->toContain('LinkedIn API returned 503');
     expect($this->socialAccount->status)->toBe(AccountStatus::Connected);
 
     Bus::assertDispatched(PublishToSocialPlatform::class, function ($job) {
@@ -315,7 +317,8 @@ test('publish reschedules when pinterest video processing times out', function (
 
     expect($postPlatform->status)->toBe(PlatformStatus::Retrying)
         ->and($postPlatform->error_context['category'] ?? null)->toBe('platform_unavailable')
-        ->and($postPlatform->error_message)->toContain('Pinterest media processing timeout');
+        ->and($postPlatform->error_message)->toBe(__('posts.errors.platform_unavailable'))
+        ->and($postPlatform->error_context['detail'] ?? null)->toContain('Pinterest media processing timeout');
 
     Bus::assertDispatched(PublishToSocialPlatform::class, function ($job) use ($postPlatform) {
         return $job->postPlatform->id === $postPlatform->id;
@@ -492,7 +495,36 @@ test('publish retry count increments across successive platform_unavailable atte
 
     $this->postPlatform->refresh();
 
+    expect($this->postPlatform->status)->toBe(PlatformStatus::Retrying);
     expect($this->postPlatform->error_context['retry_count'] ?? null)->toBe(6);
+});
+
+test('publish hard-fails when platform unavailable retries are exhausted', function () {
+    Bus::fake([PublishToSocialPlatform::class]);
+    Event::fake();
+    Mail::fake();
+
+    $publisher = Mockery::mock(LinkedInPublisher::class);
+    $publisher->shouldReceive('publish')->andThrow(
+        new PlatformUnavailableException('LinkedIn 503', 503)
+    );
+    $this->app->instance(LinkedInPublisher::class, $publisher);
+
+    $this->postPlatform->update([
+        'error_context' => ['retry_count' => PublishToSocialPlatform::MAX_PLATFORM_UNAVAILABLE_RETRIES],
+    ]);
+
+    (new PublishToSocialPlatform($this->postPlatform))->handle();
+
+    $this->postPlatform->refresh();
+
+    expect($this->postPlatform->status)->toBe(PlatformStatus::Failed)
+        ->and($this->postPlatform->error_message)->toBe(__('posts.errors.platform_unavailable_exhausted'))
+        ->and($this->postPlatform->error_context['category'] ?? null)->toBe('platform_unavailable')
+        ->and($this->postPlatform->error_context['retry_count'] ?? null)->toBe(PublishToSocialPlatform::MAX_PLATFORM_UNAVAILABLE_RETRIES + 1)
+        ->and($this->postPlatform->error_context['detail'] ?? null)->toContain('LinkedIn 503');
+
+    Bus::assertNotDispatched(PublishToSocialPlatform::class);
 });
 
 test('publish to social platform updates post status when all platforms finished', function () {

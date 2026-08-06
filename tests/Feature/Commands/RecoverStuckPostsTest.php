@@ -104,3 +104,30 @@ test('it marks post as partially published when some platforms succeeded', funct
     expect($stuckPlatform->status)->toBe(PlatformStatus::Failed);
     expect($post->status)->toBe(PostStatus::PartiallyPublished);
 });
+
+test('it recovers platforms stuck in retrying for over 1 hour', function () {
+    $post = Post::factory()->create([
+        'workspace_id' => $this->workspace->id,
+        'user_id' => $this->user->id,
+        'status' => PostStatus::Publishing,
+        'updated_at' => now()->subHours(2),
+    ]);
+
+    $platform = PostPlatform::factory()->create([
+        'post_id' => $post->id,
+        'social_account_id' => $this->socialAccount->id,
+        'status' => PlatformStatus::Retrying,
+        'enabled' => true,
+        'error_message' => __('posts.errors.platform_unavailable'),
+        'updated_at' => now()->subHours(2),
+    ]);
+
+    $this->artisan('social:recover-stuck-posts')->assertSuccessful();
+
+    $platform->refresh();
+    $post->refresh();
+
+    expect($platform->status)->toBe(PlatformStatus::Failed)
+        ->and($platform->error_message)->toBe('Publishing timed out. Please try again.')
+        ->and($post->status)->toBe(PostStatus::Failed);
+});

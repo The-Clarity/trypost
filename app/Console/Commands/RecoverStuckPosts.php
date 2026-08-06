@@ -26,7 +26,7 @@ class RecoverStuckPosts extends Command
                 // Mark stuck platforms as failed
                 $post->postPlatforms()
                     ->where('enabled', true)
-                    ->whereIn('status', [PlatformStatus::Publishing, PlatformStatus::Pending])
+                    ->whereIn('status', [PlatformStatus::Publishing, PlatformStatus::Pending, PlatformStatus::Retrying])
                     ->where('updated_at', '<=', now()->subHour())
                     ->update([
                         'status' => PlatformStatus::Failed,

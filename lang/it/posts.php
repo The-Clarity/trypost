@@ -575,6 +575,8 @@ return [
         'account_disconnected' => 'L\'account social è scollegato',
         'account_inactive' => 'L\'account social è disattivato',
         'account_token_expired' => 'Sessione dell\'account social scaduta — ricollegalo',
+        'platform_unavailable' => 'La piattaforma è temporaneamente non disponibile. Riproveremo a breve.',
+        'platform_unavailable_exhausted' => 'La piattaforma è rimasta non disponibile dopo diversi tentativi. Riprova più tardi.',
     ],
 
     'delete' => [

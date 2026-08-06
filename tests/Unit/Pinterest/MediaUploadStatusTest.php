@@ -22,10 +22,3 @@ test('media upload status tryFrom accepts known values and rejects unknown', fun
     ['unknown', null],
     ['', null],
 ]);
-
-test('media upload status marks succeeded and failed as terminal', function () {
-    expect(MediaUploadStatus::Succeeded->isTerminal())->toBeTrue()
-        ->and(MediaUploadStatus::Failed->isTerminal())->toBeTrue()
-        ->and(MediaUploadStatus::Registered->isTerminal())->toBeFalse()
-        ->and(MediaUploadStatus::Processing->isTerminal())->toBeFalse();
-});

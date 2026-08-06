@@ -43,6 +43,11 @@ class PublishToSocialPlatform implements ShouldQueue
 
     public int $timeout = 600; // 10 minutes — large video uploads need time
 
+    /**
+     * Max platform-unavailable reschedules before hard-failing (~1 hour at 10 min each).
+     */
+    public const MAX_PLATFORM_UNAVAILABLE_RETRIES = 6;
+
     public function __construct(public PostPlatform $postPlatform)
     {
         $this->onQueue($postPlatform->platform->queue());
@@ -194,6 +199,26 @@ class PublishToSocialPlatform implements ShouldQueue
     private function rescheduleForRetry(PlatformUnavailableException $e): void
     {
         $retryCount = (int) ($this->postPlatform->error_context['retry_count'] ?? 0) + 1;
+
+        if ($retryCount > self::MAX_PLATFORM_UNAVAILABLE_RETRIES) {
+            Log::warning('Publish retries exhausted: platform unavailable', [
+                'post_platform_id' => $this->postPlatform->id,
+                'platform' => $this->postPlatform->platform->value,
+                'retry_count' => $retryCount,
+                'error' => $e->getMessage(),
+            ]);
+
+            $this->postPlatform->markAsFailed(__('posts.errors.platform_unavailable_exhausted'), [
+                'category' => 'platform_unavailable',
+                'http_status' => $e->httpStatus,
+                'retry_count' => $retryCount,
+                'failed_at' => now()->toIso8601String(),
+                'detail' => $e->getMessage(),
+            ]);
+
+            return;
+        }
+
         $nextAttemptAt = now()->addMinutes(10);
 
         Log::warning('Publish rescheduled: platform unavailable', [
@@ -206,13 +231,14 @@ class PublishToSocialPlatform implements ShouldQueue
 
         $this->postPlatform->update([
             'status' => PostPlatformStatus::Retrying,
-            'error_message' => $e->getMessage(),
+            'error_message' => __('posts.errors.platform_unavailable'),
             'error_context' => [
                 'category' => 'platform_unavailable',
                 'http_status' => $e->httpStatus,
                 'retry_count' => $retryCount,
                 'last_attempt_at' => now()->toIso8601String(),
                 'next_attempt_at' => $nextAttemptAt->toIso8601String(),
+                'detail' => $e->getMessage(),
             ],
         ]);
 

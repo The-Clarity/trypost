@@ -15,12 +15,4 @@ enum MediaUploadStatus: string
     case Processing = 'processing';
     case Succeeded = 'succeeded';
     case Failed = 'failed';
-
-    public function isTerminal(): bool
-    {
-        return match ($this) {
-            self::Succeeded, self::Failed => true,
-            self::Registered, self::Processing => false,
-        };
-    }
 }

@@ -575,6 +575,8 @@ return [
         'account_disconnected' => 'Social account is disconnected',
         'account_inactive' => 'Social account is deactivated',
         'account_token_expired' => 'Social account session expired — please reconnect',
+        'platform_unavailable' => 'The platform is temporarily unavailable. We\'ll retry shortly.',
+        'platform_unavailable_exhausted' => 'The platform stayed unavailable after several retries. Please try again later.',
     ],
 
     'delete' => [
