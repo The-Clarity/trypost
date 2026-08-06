@@ -49,9 +49,9 @@ class AuthCodeRepository extends PassportAuthCodeRepository
         $requestedId = request()->input('workspace_id');
         $candidateId = is_string($requestedId) && $requestedId !== ''
             ? $requestedId
-            : ($user->current_workspace_id ? (string) $user->current_workspace_id : null);
+            : $user->current_workspace_id;
 
-        if ($candidateId === null) {
+        if (blank($candidateId)) {
             return null;
         }
 
@@ -61,6 +61,6 @@ class AuthCodeRepository extends PassportAuthCodeRepository
             return null;
         }
 
-        return $candidateId;
+        return $workspace->id;
     }
 }

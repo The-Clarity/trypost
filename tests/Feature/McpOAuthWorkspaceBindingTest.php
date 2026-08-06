@@ -246,6 +246,37 @@ test('oauth grant without a resolvable workspace fails before the token is saved
     expect(AccessToken::query()->find($tokenId))->toBeNull();
 });
 
+test('authorization code grant does not fall back to the users current workspace', function () {
+    $authCodeId = Str::random(80);
+    $tokenId = Str::random(80);
+
+    AuthCode::query()->forceCreate([
+        'id' => $authCodeId,
+        'user_id' => $this->user->id,
+        'client_id' => $this->clientId,
+        'workspace_id' => null,
+        'scopes' => '[]',
+        'revoked' => true,
+        'expires_at' => now()->addMinutes(10),
+    ]);
+
+    request()->merge([
+        'grant_type' => 'authorization_code',
+        'code' => $this->decryptor->encrypt([
+            'client_id' => $this->clientId,
+            'auth_code_id' => $authCodeId,
+            'user_id' => (string) $this->user->id,
+            'scopes' => [],
+            'expire_time' => now()->addMinutes(10)->timestamp,
+        ]),
+    ]);
+
+    expect(fn () => persistAccessTokenEntity($tokenId, (string) $this->user->id, $this->clientId))
+        ->toThrow(OAuthServerException::class);
+
+    expect(AccessToken::query()->find($tokenId))->toBeNull();
+});
+
 function persistAccessTokenEntity(string $tokenId, string $userId, string $clientId): void
 {
     $client = Mockery::mock(ClientEntityInterface::class);

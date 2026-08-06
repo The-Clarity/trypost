@@ -15,9 +15,12 @@ use League\OAuth2\Server\Entities\AccessTokenEntityInterface;
 use League\OAuth2\Server\Exception\OAuthServerException;
 
 /**
- * Persists workspace_id on MCP OAuth access tokens at issue time — same seam
- * as AuthCodeRepository for consent codes. Personal-access tokens stay null
- * so CreateApiKey (and friends) can bind afterward.
+ * Persists workspace_id on non-personal-access OAuth tokens at issue time —
+ * same seam as AuthCodeRepository for consent codes. Personal-access tokens
+ * stay null so CreateApiKey (and friends) can bind afterward.
+ *
+ * Authorization-code grants use only the auth code's workspace (no current-
+ * workspace fallback). Refresh grants inherit the refreshed token's workspace.
  */
 class AccessTokenRepository extends PassportAccessTokenRepository
 {
@@ -35,7 +38,7 @@ class AccessTokenRepository extends PassportAccessTokenRepository
         $clientId = $accessTokenEntity->getClient()->getIdentifier();
         $workspaceId = null;
 
-        if ($this->isMcpClient($clientId)) {
+        if ($this->clientRequiresWorkspace($clientId)) {
             $workspaceId = $this->resolveWorkspaceId($userId);
 
             if ($workspaceId === null) {
@@ -58,7 +61,7 @@ class AccessTokenRepository extends PassportAccessTokenRepository
         $this->events->dispatch(new AccessTokenCreated($id, $userId, $clientId));
     }
 
-    private function isMcpClient(string $clientId): bool
+    private function clientRequiresWorkspace(string $clientId): bool
     {
         $client = Passport::client()->newQuery()->find($clientId);
 
@@ -76,7 +79,7 @@ class AccessTokenRepository extends PassportAccessTokenRepository
             'authorization_code' => $this->ownedWorkspace(
                 $user,
                 AuthCode::query()->find($this->payloadId('code', 'auth_code_id'))?->workspace_id,
-            ) ?? $this->currentWorkspace($user),
+            ),
             default => $this->currentWorkspace($user),
         };
     }
