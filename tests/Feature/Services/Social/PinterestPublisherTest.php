@@ -15,6 +15,7 @@ use App\Models\Workspace;
 use App\Services\Media\MediaOptimizer;
 use App\Services\Social\PinterestPublisher;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Sleep;
 
 beforeEach(function () {
     $this->user = User::factory()->create();
@@ -955,6 +956,8 @@ test('pinterest publisher throws exception for unsupported content type', functi
 });
 
 test('pinterest publisher waits through pending video processing before creating the pin', function () {
+    Sleep::fake();
+
     $this->postPlatform->update(['content_type' => ContentType::PinterestVideoPin]);
 
     $this->post->update([
@@ -1000,21 +1003,17 @@ test('pinterest publisher waits through pending video processing before creating
         return Http::response('fake-video-content', 200);
     });
 
-    $publisher = new class extends PinterestPublisher
-    {
-        protected function processingPollSeconds(): int
-        {
-            return 0;
-        }
-    };
-
-    $result = $publisher->publish($this->postPlatform);
+    $result = $this->publisher->publish($this->postPlatform);
 
     expect($result['id'])->toBe('video_pin_after_wait')
         ->and($statusChecks)->toBe(3);
+
+    Sleep::assertSleptTimes(2);
 });
 
 test('pinterest publisher treats video processing timeout as platform unavailable for retry', function () {
+    Sleep::fake();
+
     $this->postPlatform->update(['content_type' => ContentType::PinterestVideoPin]);
 
     $this->post->update([
@@ -1057,20 +1056,18 @@ test('pinterest publisher treats video processing timeout as platform unavailabl
         {
             return 2;
         }
-
-        protected function processingPollSeconds(): int
-        {
-            return 0;
-        }
     };
 
     expect(fn () => $publisher->publish($this->postPlatform))
         ->toThrow(PlatformUnavailableException::class, 'Pinterest media processing timeout after 2 attempts');
 
     Http::assertNotSent(fn ($request) => str_contains($request->url(), '/v5/pins'));
+    Sleep::assertSleptTimes(2);
 });
 
 test('pinterest publisher fails hard when video processing reports failed', function () {
+    Sleep::fake();
+
     $this->postPlatform->update(['content_type' => ContentType::PinterestVideoPin]);
 
     $this->post->update([
@@ -1110,16 +1107,9 @@ test('pinterest publisher fails hard when video processing reports failed', func
         return Http::response('fake-video-content', 200);
     });
 
-    $publisher = new class extends PinterestPublisher
-    {
-        protected function processingPollSeconds(): int
-        {
-            return 0;
-        }
-    };
-
-    expect(fn () => $publisher->publish($this->postPlatform))
+    expect(fn () => $this->publisher->publish($this->postPlatform))
         ->toThrow(PinterestPublishException::class, 'Pinterest media processing failed: VIDEO_TOO_LONG');
 
     Http::assertNotSent(fn ($request) => str_contains($request->url(), '/v5/pins'));
+    Sleep::assertNeverSlept();
 });

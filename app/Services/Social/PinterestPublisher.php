@@ -17,6 +17,7 @@ use App\Services\Social\Concerns\HasSocialHttpClient;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Sleep;
 
 class PinterestPublisher
 {
@@ -347,7 +348,7 @@ class PinterestPublisher
                     'status_code' => $response->status(),
                     'body' => $this->redactResponseBody($response->body()),
                 ]);
-                sleep($pollSeconds);
+                Sleep::for($pollSeconds)->seconds();
 
                 continue;
             }
@@ -369,7 +370,7 @@ class PinterestPublisher
                 );
             }
 
-            sleep($pollSeconds);
+            Sleep::for($pollSeconds)->seconds();
         }
 
         Log::warning('Pinterest media processing timeout', [
