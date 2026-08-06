@@ -323,17 +323,7 @@ class PinterestPublisher
         return $this->createPin($account, $payload, 'Pinterest carousel creation failed');
     }
 
-    /**
-     * Poll until Pinterest finishes processing an uploaded video.
-     *
-     * Timeout is treated as transient (PlatformUnavailableException) so
-     * PublishToSocialPlatform can reschedule — slow processing ≠ bad media.
-     *
-     * Default budget: 60 × 5s ≈ 5 minutes (was 30 × 3s ≈ 90s — too short for Pinterest).
-     *
-     * @throws PlatformUnavailableException
-     * @throws PinterestPublishException
-     */
+    /** @throws PlatformUnavailableException|PinterestPublishException */
     private function waitForMediaProcessing(SocialAccount $account, string $mediaId): void
     {
         $maxAttempts = 60;
