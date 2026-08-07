@@ -37,16 +37,14 @@ return [
         ],
     ],
 
-    'linkedin' => [
-        'client_id' => env('LINKEDIN_CLIENT_ID'),
-        'client_secret' => env('LINKEDIN_CLIENT_SECRET'),
-        'redirect' => env('LINKEDIN_CLIENT_REDIRECT'),
-    ],
-
-    'linkedin-openid' => [
-        'client_id' => env('LINKEDIN_CLIENT_ID'),
-        'client_secret' => env('LINKEDIN_CLIENT_SECRET'),
-        'redirect' => env('LINKEDIN_CLIENT_REDIRECT'),
+    'linkedin-page' => [
+        'client_id' => env('LINKEDIN_PAGE_CLIENT_ID'),
+        'client_secret' => env('LINKEDIN_PAGE_CLIENT_SECRET'),
+        'redirect' => env('LINKEDIN_PAGE_CLIENT_REDIRECT'),
+        'guzzle' => [
+            'connect_timeout' => 5,
+            'timeout' => 10,
+        ],
     ],
 
     'x' => [

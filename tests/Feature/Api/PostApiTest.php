@@ -20,9 +20,8 @@ beforeEach(function () {
     $this->workspace = $result['workspace'];
     $this->plainToken = $result['plain_token'];
 
-    $this->socialAccount = SocialAccount::factory()->create([
+    $this->socialAccount = SocialAccount::factory()->linkedinPage()->create([
         'workspace_id' => $this->workspace->id,
-        'platform' => Platform::LinkedIn,
     ]);
 });
 
@@ -68,7 +67,7 @@ it('creates a post', function () {
             'platforms' => [
                 [
                     'social_account_id' => $this->socialAccount->id,
-                    'content_type' => 'linkedin_post',
+                    'content_type' => 'linkedin_page_post',
                 ],
             ],
         ])
@@ -89,7 +88,7 @@ it('ignores a client-supplied created_via and always records api', function () {
             'platforms' => [
                 [
                     'social_account_id' => $this->socialAccount->id,
-                    'content_type' => 'linkedin_post',
+                    'content_type' => 'linkedin_page_post',
                 ],
             ],
         ])
@@ -106,7 +105,7 @@ it('creates a post with content, media, and labels', function () {
         'content' => 'Hello from the API',
         'media' => [['id' => 'media-1', 'path' => 'media/foo.jpg', 'url' => 'https://example.com/foo.jpg', 'type' => 'image']],
         'platforms' => [
-            ['social_account_id' => $this->socialAccount->id, 'content_type' => 'linkedin_post'],
+            ['social_account_id' => $this->socialAccount->id, 'content_type' => 'linkedin_page_post'],
         ],
         'label_ids' => [$label->id],
     ];
@@ -125,16 +124,15 @@ it('creates a post with content, media, and labels', function () {
 });
 
 it('rejects creating a post with an inactive social account', function () {
-    $inactive = SocialAccount::factory()->create([
+    $inactive = SocialAccount::factory()->linkedinPage()->create([
         'workspace_id' => $this->workspace->id,
-        'platform' => Platform::LinkedIn,
         'is_active' => false,
     ]);
 
     $this->withHeaders(['Authorization' => 'Bearer '.$this->plainToken])
         ->postJson(route('api.posts.store'), [
             'platforms' => [
-                ['social_account_id' => $inactive->id, 'content_type' => 'linkedin_post'],
+                ['social_account_id' => $inactive->id, 'content_type' => 'linkedin_page_post'],
             ],
         ])
         ->assertJsonValidationErrors(['platforms.0.social_account_id']);
@@ -172,7 +170,7 @@ it('updates a post', function () {
         'status' => PostStatus::Draft,
     ]);
 
-    $postPlatform = PostPlatform::factory()->linkedin()->create([
+    $postPlatform = PostPlatform::factory()->linkedinPage()->create([
         'post_id' => $post->id,
         'social_account_id' => $this->socialAccount->id,
         'enabled' => true,
@@ -184,7 +182,7 @@ it('updates a post', function () {
             'platforms' => [
                 [
                     'id' => $postPlatform->id,
-                    'content_type' => ContentType::LinkedInPost->value,
+                    'content_type' => ContentType::LinkedInPagePost->value,
                 ],
             ],
         ])
@@ -208,7 +206,7 @@ it('rejects updating a post with instagram_carousel — carousel is not a stored
         'status' => PostStatus::Draft,
     ]);
 
-    $postPlatform = PostPlatform::factory()->linkedin()->create([
+    $postPlatform = PostPlatform::factory()->linkedinPage()->create([
         'post_id' => $post->id,
         'social_account_id' => $this->socialAccount->id,
         'enabled' => true,
@@ -226,15 +224,14 @@ it('rejects updating a post with instagram_carousel — carousel is not a stored
 
 it('cannot update post from another workspace', function () {
     $otherWorkspace = Workspace::factory()->create();
-    $otherSocialAccount = SocialAccount::factory()->create([
+    $otherSocialAccount = SocialAccount::factory()->linkedinPage()->create([
         'workspace_id' => $otherWorkspace->id,
-        'platform' => Platform::LinkedIn,
     ]);
     $post = Post::factory()->create([
         'workspace_id' => $otherWorkspace->id,
         'user_id' => $this->user->id,
     ]);
-    $postPlatform = PostPlatform::factory()->linkedin()->create([
+    $postPlatform = PostPlatform::factory()->linkedinPage()->create([
         'post_id' => $post->id,
         'social_account_id' => $otherSocialAccount->id,
         'enabled' => true,
@@ -246,7 +243,7 @@ it('cannot update post from another workspace', function () {
             'platforms' => [
                 [
                     'id' => $postPlatform->id,
-                    'content_type' => ContentType::LinkedInPost->value,
+                    'content_type' => ContentType::LinkedInPagePost->value,
                 ],
             ],
         ])
@@ -260,7 +257,7 @@ it('cannot update post in any terminal state', function (PostStatus $status) {
         'status' => $status,
     ]);
 
-    $postPlatform = PostPlatform::factory()->linkedin()->create([
+    $postPlatform = PostPlatform::factory()->linkedinPage()->create([
         'post_id' => $post->id,
         'social_account_id' => $this->socialAccount->id,
         'enabled' => true,
@@ -272,7 +269,7 @@ it('cannot update post in any terminal state', function (PostStatus $status) {
             'platforms' => [
                 [
                     'id' => $postPlatform->id,
-                    'content_type' => ContentType::LinkedInPost->value,
+                    'content_type' => ContentType::LinkedInPagePost->value,
                 ],
             ],
         ])
@@ -477,7 +474,7 @@ it('rejects creating a post with a label from another workspace', function () {
     $this->withHeaders(['Authorization' => 'Bearer '.$this->plainToken])
         ->postJson(route('api.posts.store'), [
             'platforms' => [
-                ['social_account_id' => $this->socialAccount->id, 'content_type' => 'linkedin_post'],
+                ['social_account_id' => $this->socialAccount->id, 'content_type' => 'linkedin_page_post'],
             ],
             'label_ids' => [$foreignLabel->id],
         ])
@@ -496,7 +493,7 @@ it('rejects updating a post with a platforms[].id that belongs to another post',
         'user_id' => $this->user->id,
         'status' => PostStatus::Draft,
     ]);
-    $foreignPlatform = PostPlatform::factory()->linkedin()->create([
+    $foreignPlatform = PostPlatform::factory()->linkedinPage()->create([
         'post_id' => $otherPost->id,
         'social_account_id' => $this->socialAccount->id,
     ]);
@@ -505,7 +502,7 @@ it('rejects updating a post with a platforms[].id that belongs to another post',
         ->putJson(route('api.posts.update', $myPost), [
             'status' => 'draft',
             'platforms' => [
-                ['id' => $foreignPlatform->id, 'content_type' => ContentType::LinkedInPost->value],
+                ['id' => $foreignPlatform->id, 'content_type' => ContentType::LinkedInPagePost->value],
             ],
         ])
         ->assertJsonValidationErrors(['platforms.0.id']);
@@ -517,7 +514,7 @@ it('rejects updating a post when content_type does not match the post_platform',
         'user_id' => $this->user->id,
         'status' => PostStatus::Draft,
     ]);
-    $postPlatform = PostPlatform::factory()->linkedin()->create([
+    $postPlatform = PostPlatform::factory()->linkedinPage()->create([
         'post_id' => $post->id,
         'social_account_id' => $this->socialAccount->id,
         'enabled' => true,
@@ -647,7 +644,7 @@ it('rejects creating a post with a past scheduled_at', function () {
     $this->withHeaders(['Authorization' => 'Bearer '.$this->plainToken])
         ->postJson(route('api.posts.store'), [
             'platforms' => [
-                ['social_account_id' => $this->socialAccount->id, 'content_type' => 'linkedin_post'],
+                ['social_account_id' => $this->socialAccount->id, 'content_type' => 'linkedin_page_post'],
             ],
             'scheduled_at' => now()->subDay()->toIso8601String(),
         ])
@@ -686,7 +683,7 @@ it('creates a post with platform meta (aspect_ratio) and returns it', function (
     $this->withHeaders(['Authorization' => 'Bearer '.$this->plainToken])
         ->postJson(route('api.posts.store'), [
             'platforms' => [
-                ['social_account_id' => $this->socialAccount->id, 'content_type' => 'linkedin_post', 'meta' => ['aspect_ratio' => '4:5']],
+                ['social_account_id' => $this->socialAccount->id, 'content_type' => 'linkedin_page_post', 'meta' => ['aspect_ratio' => '4:5']],
             ],
         ])
         ->assertCreated()
@@ -701,7 +698,7 @@ it('rejects creating a post with an invalid aspect_ratio', function () {
     $this->withHeaders(['Authorization' => 'Bearer '.$this->plainToken])
         ->postJson(route('api.posts.store'), [
             'platforms' => [
-                ['social_account_id' => $this->socialAccount->id, 'content_type' => 'linkedin_post', 'meta' => ['aspect_ratio' => '3:2']],
+                ['social_account_id' => $this->socialAccount->id, 'content_type' => 'linkedin_page_post', 'meta' => ['aspect_ratio' => '3:2']],
             ],
         ])
         ->assertJsonValidationErrors(['platforms.0.meta.aspect_ratio']);
@@ -713,7 +710,7 @@ it('rejects updating a post with an invalid aspect_ratio', function () {
         'user_id' => $this->user->id,
         'status' => PostStatus::Draft,
     ]);
-    $postPlatform = PostPlatform::factory()->linkedin()->create([
+    $postPlatform = PostPlatform::factory()->linkedinPage()->create([
         'post_id' => $post->id,
         'social_account_id' => $this->socialAccount->id,
         'enabled' => true,
@@ -723,7 +720,7 @@ it('rejects updating a post with an invalid aspect_ratio', function () {
         ->putJson(route('api.posts.update', $post), [
             'status' => 'draft',
             'platforms' => [
-                ['id' => $postPlatform->id, 'content_type' => 'linkedin_post', 'meta' => ['aspect_ratio' => '3:2']],
+                ['id' => $postPlatform->id, 'content_type' => 'linkedin_page_post', 'meta' => ['aspect_ratio' => '3:2']],
             ],
         ])
         ->assertJsonValidationErrors(['platforms.0.meta.aspect_ratio']);
@@ -735,7 +732,7 @@ it('accepts a valid aspect_ratio on update and persists it', function () {
         'user_id' => $this->user->id,
         'status' => PostStatus::Draft,
     ]);
-    $postPlatform = PostPlatform::factory()->linkedin()->create([
+    $postPlatform = PostPlatform::factory()->linkedinPage()->create([
         'post_id' => $post->id,
         'social_account_id' => $this->socialAccount->id,
         'enabled' => true,
@@ -745,7 +742,7 @@ it('accepts a valid aspect_ratio on update and persists it', function () {
         ->putJson(route('api.posts.update', $post), [
             'status' => 'draft',
             'platforms' => [
-                ['id' => $postPlatform->id, 'content_type' => 'linkedin_post', 'meta' => ['aspect_ratio' => '16:9']],
+                ['id' => $postPlatform->id, 'content_type' => 'linkedin_page_post', 'meta' => ['aspect_ratio' => '16:9']],
             ],
         ])
         ->assertOk()
@@ -758,7 +755,7 @@ it('accepts the original aspect_ratio (no crop) on create', function () {
     $this->withHeaders(['Authorization' => 'Bearer '.$this->plainToken])
         ->postJson(route('api.posts.store'), [
             'platforms' => [
-                ['social_account_id' => $this->socialAccount->id, 'content_type' => 'linkedin_post', 'meta' => ['aspect_ratio' => 'original']],
+                ['social_account_id' => $this->socialAccount->id, 'content_type' => 'linkedin_page_post', 'meta' => ['aspect_ratio' => 'original']],
             ],
         ])
         ->assertCreated();

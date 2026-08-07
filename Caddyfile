@@ -2,5 +2,5 @@
 # APP_DOMAIN is provided by the caddy service in compose.prod.yaml.
 # reverse_proxy transparently passes through WebSocket upgrades (Reverb on /app).
 {$APP_DOMAIN} {
-	reverse_proxy app:80
+	reverse_proxy app:8081
 }

@@ -23,7 +23,6 @@ use App\Services\Social\Discord\DiscordPublisher;
 use App\Services\Social\FacebookPublisher;
 use App\Services\Social\InstagramPublisher;
 use App\Services\Social\LinkedInPagePublisher;
-use App\Services\Social\LinkedInPublisher;
 use App\Services\Social\MastodonPublisher;
 use App\Services\Social\PinterestPublisher;
 use App\Services\Social\Telegram\TelegramPublisher;
@@ -54,6 +53,21 @@ class PublishToSocialPlatform implements ShouldQueue
         $this->postPlatform->refresh();
 
         if ($this->postPlatform->status === PostPlatformStatus::Published) {
+            return;
+        }
+
+        if (! $this->postPlatform->socialAccount->isAvailableForUse()) {
+            $message = $this->postPlatform->platform === SocialPlatform::LinkedIn
+                ? 'Personal LinkedIn publishing is not supported. Connect the configured LinkedIn Page instead.'
+                : 'This social account is not authorized for this deployment.';
+
+            $this->postPlatform->markAsFailed($message, [
+                'category' => 'platform_unavailable',
+                'failed_at' => now()->toIso8601String(),
+            ]);
+            $this->updatePostStatus();
+            $this->broadcastStatus();
+
             return;
         }
 
@@ -235,10 +249,10 @@ class PublishToSocialPlatform implements ShouldQueue
             : 'An unexpected error occurred while publishing. Please try again.';
     }
 
-    private function getPublisher(): LinkedInPublisher|LinkedInPagePublisher|XPublisher|TikTokPublisher|YouTubePublisher|FacebookPublisher|InstagramPublisher|ThreadsPublisher|PinterestPublisher|BlueskyPublisher|MastodonPublisher|TelegramPublisher|DiscordPublisher
+    private function getPublisher(): LinkedInPagePublisher|XPublisher|TikTokPublisher|YouTubePublisher|FacebookPublisher|InstagramPublisher|ThreadsPublisher|PinterestPublisher|BlueskyPublisher|MastodonPublisher|TelegramPublisher|DiscordPublisher
     {
         return match ($this->postPlatform->platform) {
-            SocialPlatform::LinkedIn => app(LinkedInPublisher::class),
+            SocialPlatform::LinkedIn => throw new \LogicException('Personal LinkedIn publishing is unavailable.'),
             SocialPlatform::LinkedInPage => app(LinkedInPagePublisher::class),
             SocialPlatform::X => app(XPublisher::class),
             SocialPlatform::TikTok => app(TikTokPublisher::class),

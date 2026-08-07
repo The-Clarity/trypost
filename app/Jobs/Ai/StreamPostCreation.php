@@ -52,7 +52,12 @@ class StreamPostCreation implements ShouldQueue
     public function handle(): void
     {
         $workspace = Workspace::findOrFail($this->workspaceId);
-        $socialAccount = $this->socialAccountId ? SocialAccount::find($this->socialAccountId) : null;
+        $socialAccount = $this->socialAccountId
+            ? SocialAccount::query()
+                ->available()
+                ->where('workspace_id', $workspace->id)
+                ->find($this->socialAccountId)
+            : null;
 
         $style = app(AiTemplateRegistry::class)->find($this->template);
 

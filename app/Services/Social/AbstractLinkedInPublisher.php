@@ -57,13 +57,32 @@ abstract class AbstractLinkedInPublisher
 
     public function publish(PostPlatform $postPlatform): array
     {
+        $account = $postPlatform->socialAccount;
+
+        if (! $account || ! $account->isAvailableForUse()) {
+            $message = match (true) {
+                $account?->platform === Platform::LinkedIn => 'Personal LinkedIn publishing is not supported.',
+                $account?->platform === Platform::LinkedInPage
+                    && SocialAccount::configuredLinkedInPageOrganizationId() === null => 'LinkedIn Page organization ID is not configured',
+                $account?->platform === Platform::LinkedInPage
+                    && blank(data_get($account->meta, 'organization_id')) => 'LinkedIn Page organization ID not configured',
+                $account?->platform === Platform::LinkedInPage => 'LinkedIn Page is not authorized for this deployment',
+                default => 'This LinkedIn publishing identity is not authorized for this deployment.',
+            };
+
+            throw new LinkedInPublishException(
+                userMessage: $message,
+                category: ErrorCategory::Permission,
+            );
+        }
+
         $this->validateContentLength($postPlatform);
 
         $content = $postPlatform->post->content
             ? app(ContentSanitizer::class)->sanitize($postPlatform->post->content, $postPlatform->platform)
             : null;
 
-        $this->account = $postPlatform->socialAccount;
+        $this->account = $account;
         $this->hasRetried = false;
 
         if ($this->account->needsProactiveTokenRefresh()) {

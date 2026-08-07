@@ -52,14 +52,14 @@ it('persists Discord channel, mentions and embeds meta on store', function () {
 });
 
 it('persists the LinkedIn document_title meta on store', function () {
-    $linkedin = SocialAccount::factory()->create(['workspace_id' => $this->workspace->id, 'platform' => Platform::LinkedIn]);
+    $linkedin = SocialAccount::factory()->linkedinPage()->create(['workspace_id' => $this->workspace->id]);
 
     $this->withHeaders($this->headers)
         ->postJson(route('api.posts.store'), [
             'content' => 'Check our latest deck',
             'platforms' => [[
                 'social_account_id' => $linkedin->id,
-                'content_type' => ContentType::LinkedInPost->value,
+                'content_type' => ContentType::LinkedInPagePost->value,
                 'meta' => ['document_title' => 'Q2 Report'],
             ]],
         ])
@@ -71,7 +71,7 @@ it('persists the LinkedIn document_title meta on store', function () {
 it('publishes a LinkedIn document post that has a PDF', function () {
     Queue::fake();
 
-    $linkedin = SocialAccount::factory()->create(['workspace_id' => $this->workspace->id, 'platform' => Platform::LinkedIn]);
+    $linkedin = SocialAccount::factory()->linkedinPage()->create(['workspace_id' => $this->workspace->id]);
     $post = Post::factory()->create([
         'workspace_id' => $this->workspace->id,
         'user_id' => $this->user->id,
@@ -83,13 +83,13 @@ it('publishes a LinkedIn document post that has a PDF', function () {
     ]);
     $platform = PostPlatform::factory()->create([
         'post_id' => $post->id, 'social_account_id' => $linkedin->id,
-        'platform' => Platform::LinkedIn, 'content_type' => ContentType::LinkedInPost, 'enabled' => true,
+        'platform' => Platform::LinkedInPage, 'content_type' => ContentType::LinkedInPagePost, 'enabled' => true,
     ]);
 
     $this->withHeaders($this->headers)
         ->putJson(route('api.posts.update', $post), [
             'status' => PostStatus::Publishing->value,
-            'platforms' => [['id' => $platform->id, 'content_type' => ContentType::LinkedInPost->value]],
+            'platforms' => [['id' => $platform->id, 'content_type' => ContentType::LinkedInPagePost->value]],
         ])
         ->assertOk();
 
@@ -97,7 +97,7 @@ it('publishes a LinkedIn document post that has a PDF', function () {
 });
 
 it('rejects publishing a LinkedIn post that mixes a PDF with an image', function () {
-    $linkedin = SocialAccount::factory()->create(['workspace_id' => $this->workspace->id, 'platform' => Platform::LinkedIn]);
+    $linkedin = SocialAccount::factory()->linkedinPage()->create(['workspace_id' => $this->workspace->id]);
     $post = Post::factory()->create([
         'workspace_id' => $this->workspace->id,
         'user_id' => $this->user->id,
@@ -108,13 +108,13 @@ it('rejects publishing a LinkedIn post that mixes a PDF with an image', function
     ]);
     $platform = PostPlatform::factory()->create([
         'post_id' => $post->id, 'social_account_id' => $linkedin->id,
-        'platform' => Platform::LinkedIn, 'content_type' => ContentType::LinkedInPost, 'enabled' => true,
+        'platform' => Platform::LinkedInPage, 'content_type' => ContentType::LinkedInPagePost, 'enabled' => true,
     ]);
 
     $this->withHeaders($this->headers)
         ->putJson(route('api.posts.update', $post), [
             'status' => PostStatus::Publishing->value,
-            'platforms' => [['id' => $platform->id, 'content_type' => ContentType::LinkedInPost->value]],
+            'platforms' => [['id' => $platform->id, 'content_type' => ContentType::LinkedInPagePost->value]],
         ])
         ->assertUnprocessable()
         ->assertJsonValidationErrors(['platforms.0.content_type']);
@@ -123,7 +123,7 @@ it('rejects publishing a LinkedIn post that mixes a PDF with an image', function
 it('publishes a valid LinkedIn document without resubmitting content_type', function () {
     Queue::fake();
 
-    $linkedin = SocialAccount::factory()->create(['workspace_id' => $this->workspace->id, 'platform' => Platform::LinkedIn]);
+    $linkedin = SocialAccount::factory()->linkedinPage()->create(['workspace_id' => $this->workspace->id]);
     $post = Post::factory()->create([
         'workspace_id' => $this->workspace->id,
         'user_id' => $this->user->id,
@@ -135,7 +135,7 @@ it('publishes a valid LinkedIn document without resubmitting content_type', func
     ]);
     $platform = PostPlatform::factory()->create([
         'post_id' => $post->id, 'social_account_id' => $linkedin->id,
-        'platform' => Platform::LinkedIn, 'content_type' => ContentType::LinkedInPost, 'enabled' => true,
+        'platform' => Platform::LinkedInPage, 'content_type' => ContentType::LinkedInPagePost, 'enabled' => true,
     ]);
 
     $this->withHeaders($this->headers)
@@ -149,7 +149,7 @@ it('publishes a valid LinkedIn document without resubmitting content_type', func
 });
 
 it('rejects only the platform that cannot take a PDF in a multi-platform post', function () {
-    $linkedin = SocialAccount::factory()->create(['workspace_id' => $this->workspace->id, 'platform' => Platform::LinkedIn]);
+    $linkedin = SocialAccount::factory()->linkedinPage()->create(['workspace_id' => $this->workspace->id]);
     $x = SocialAccount::factory()->create(['workspace_id' => $this->workspace->id, 'platform' => Platform::X]);
 
     $post = Post::factory()->create([
@@ -163,7 +163,7 @@ it('rejects only the platform that cannot take a PDF in a multi-platform post', 
     ]);
     $linkedinPlatform = PostPlatform::factory()->create([
         'post_id' => $post->id, 'social_account_id' => $linkedin->id,
-        'platform' => Platform::LinkedIn, 'content_type' => ContentType::LinkedInPost, 'enabled' => true,
+        'platform' => Platform::LinkedInPage, 'content_type' => ContentType::LinkedInPagePost, 'enabled' => true,
     ]);
     $xPlatform = PostPlatform::factory()->create([
         'post_id' => $post->id, 'social_account_id' => $x->id,
@@ -174,7 +174,7 @@ it('rejects only the platform that cannot take a PDF in a multi-platform post', 
         ->putJson(route('api.posts.update', $post), [
             'status' => PostStatus::Publishing->value,
             'platforms' => [
-                ['id' => $linkedinPlatform->id, 'content_type' => ContentType::LinkedInPost->value],
+                ['id' => $linkedinPlatform->id, 'content_type' => ContentType::LinkedInPagePost->value],
                 ['id' => $xPlatform->id, 'content_type' => ContentType::XPost->value],
             ],
         ])

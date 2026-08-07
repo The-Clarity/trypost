@@ -59,6 +59,7 @@ class PostTemplateController extends Controller
 
         if ($socialAccountId) {
             $socialAccount = SocialAccount::where('id', $socialAccountId)
+                ->available()
                 ->where('workspace_id', $workspace->id)
                 ->first();
 

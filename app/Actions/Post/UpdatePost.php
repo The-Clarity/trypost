@@ -55,7 +55,10 @@ class UpdatePost
                     }
 
                     if (data_get($platformData, 'meta') !== null) {
-                        $postPlatform = $post->postPlatforms()->where('id', data_get($platformData, 'id'))->first();
+                        $postPlatform = $post->postPlatforms()
+                            ->whereHas('socialAccount', fn ($query) => $query->active())
+                            ->where('id', data_get($platformData, 'id'))
+                            ->first();
 
                         if ($postPlatform) {
                             $updateData['meta'] = array_filter(
@@ -66,6 +69,7 @@ class UpdatePost
                     }
 
                     $post->postPlatforms()
+                        ->whereHas('socialAccount', fn ($query) => $query->active())
                         ->where('id', data_get($platformData, 'id'))
                         ->update($updateData);
                 }

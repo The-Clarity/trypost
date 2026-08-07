@@ -36,6 +36,35 @@ test('uploadFromUrl uploads image and returns path', function () {
     Storage::assertExists($result);
 });
 
+test('uploadFromUrl writes without requesting public object visibility', function () {
+    Http::fake([
+        '*' => Http::response('private-image-content', 200, ['Content-Type' => 'image/jpeg']),
+    ]);
+
+    Storage::shouldReceive('put')
+        ->once()
+        ->with(
+            Mockery::on(fn (string $path) => str_starts_with($path, 'social-accounts/')),
+            'private-image-content',
+        )
+        ->andReturnTrue();
+
+    expect(uploadFromUrl('https://example.com/image.jpg'))->toStartWith('social-accounts/');
+});
+
+test('uploadFromUrl does not hide object storage write failures', function () {
+    Http::fake([
+        '*' => Http::response('private-image-content', 200, ['Content-Type' => 'image/jpeg']),
+    ]);
+
+    Storage::shouldReceive('put')
+        ->once()
+        ->andThrow(new RuntimeException('private object storage unavailable'));
+
+    expect(fn () => uploadFromUrl('https://example.com/image.jpg'))
+        ->toThrow(RuntimeException::class, 'private object storage unavailable');
+});
+
 test('uploadFromUrl detects png content type', function () {
     Storage::fake();
 

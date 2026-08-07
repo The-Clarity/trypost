@@ -5,12 +5,17 @@
 #   2. Edit APP_URL and the passwords marked "change me".
 #   3. Start:                 docker compose -f compose.prod.yaml up -d
 #
-# This pulls the published image — no local build. Postgres, Redis, the queue
-# workers, the scheduler and the WebSocket server all run for you.
+# The app entrypoint runs the explicit, idempotent deployment contract before
+# starting services. Dedicated migration jobs should run the same command:
+#   composer production:prepare
+#
+# This pulls the private, patched Clarity runtime image after registry login.
+# Postgres, Redis, the queue workers, scheduler, and WebSocket server all run
+# for you. TRYPOST_IMAGE can point at another privately managed registry.
 
 services:
   app:
-    image: ghcr.io/trypostit/trypost:latest
+    image: ${TRYPOST_IMAGE:-330368327370.dkr.ecr.us-east-1.amazonaws.com/clarity-3p-trypost:latest}
     container_name: trypost
     restart: unless-stopped
     environment:
@@ -22,6 +27,7 @@ services:
       APP_URL: http://localhost:8000    # <- your public URL, e.g. https://post.yourdomain.com
       SELF_HOSTED: "true"
       TRYPOST_TARGET: production
+      TRYPOST_RUN_PREPARE: "1"          # single-node Compose owns preparation
 
       # ===== Database (bundled postgres service below) =====
       DB_CONNECTION: pgsql
@@ -40,11 +46,11 @@ services:
       BROADCAST_CONNECTION: reverb
 
       # ===== WebSockets (Reverb) =====
-      # The published image bakes the client at localhost:8080. For a custom
-      # domain, rebuild the image with --build-arg VITE_REVERB_HOST=<domain>
-      # VITE_REVERB_PORT=443 VITE_REVERB_SCHEME=https.
+      # These values configure both the Reverb server and the browser client at
+      # runtime. REVERB_APP_KEY is a public application identifier; keep the
+      # secret in REVERB_APP_SECRET.
       REVERB_APP_ID: "1001"
-      REVERB_APP_KEY: trypost-reverb-key           # must match the key baked into the published image
+      REVERB_APP_KEY: trypost-reverb-key
       REVERB_APP_SECRET: change-me-reverb-secret   # <- change me
       REVERB_HOST: localhost
       REVERB_PORT: "8080"
@@ -93,8 +99,10 @@ services:
 
       # ===== Social platforms (fill in when you connect each network) =====
       # Redirect URI in each portal: ${APP_URL}/accounts/<platform>/callback
-      # LINKEDIN_CLIENT_ID: ""
-      # LINKEDIN_CLIENT_SECRET: ""
+      # LINKEDIN_PAGE_CLIENT_ID: ""
+      # LINKEDIN_PAGE_CLIENT_SECRET: ""
+      # LINKEDIN_PAGE_CLIENT_REDIRECT: "https://trypost.example/accounts/linkedin/callback"
+      # LINKEDIN_PAGE_ORGANIZATION_ID: ""
       # X_CLIENT_ID: ""
       # X_CLIENT_SECRET: ""
       # FACEBOOK_CLIENT_ID: ""
@@ -115,7 +123,7 @@ services:
       # ANTHROPIC_API_KEY: ""
       # GEMINI_API_KEY: ""
     ports:
-      - "8000:80"     # app (nginx)
+      - "8000:8081"   # app (non-root nginx)
       - "8080:8080"   # Reverb WebSocket
     volumes:
       - storage:/var/www/html/storage/app
@@ -124,6 +132,12 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'curl', '-fsS', 'http://127.0.0.1:8081/health']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
   pgsql:
     image: postgres:16-alpine

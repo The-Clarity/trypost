@@ -104,7 +104,8 @@ test('platform exposes the correct default token TTL fallback', function () {
 });
 
 test('platform is enabled by default', function () {
-    expect(Platform::LinkedIn->isEnabled())->toBeTrue();
+    expect(Platform::LinkedIn->isEnabled())->toBeFalse();
+    expect(Platform::LinkedInPage->isEnabled())->toBeTrue();
     expect(Platform::Instagram->isEnabled())->toBeTrue();
 });
 
@@ -114,24 +115,40 @@ test('platform can be disabled via config', function () {
     expect(Platform::LinkedIn->isEnabled())->toBeFalse();
 });
 
-test('only linkedin pages are not directly connectable', function () {
-    expect(Platform::LinkedInPage->isConnectable())->toBeFalse();
-    expect(Platform::LinkedIn->isConnectable())->toBeTrue();
+test('personal linkedin is a compatibility tombstone and never connectable', function () {
+    config(['trypost.platforms.linkedin.enabled' => true]);
+
+    expect(Platform::LinkedIn->isSupported())->toBeFalse();
+    expect(Platform::LinkedIn->isConnectable())->toBeFalse();
+    expect(Platform::supportedValues())->not->toContain(Platform::LinkedIn->value);
+});
+
+test('personal linkedin compatibility config has no oauth or network capability', function () {
+    expect(config('trypost.platforms.linkedin'))->toBe([
+        'enabled' => false,
+        'api' => null,
+        'oauth_api' => null,
+    ])->and(config('trypost.platforms.linkedin.scopes'))->toBeNull()
+        ->and(config('services.linkedin'))->toBeNull()
+        ->and(Platform::LinkedIn->requiredPublishScopes())->toBe([]);
+});
+
+test('supported linkedin page is directly connectable', function () {
+    expect(Platform::LinkedInPage->isConnectable())->toBeTrue();
     expect(Platform::InstagramFacebook->isConnectable())->toBeTrue();
     expect(Platform::Instagram->isConnectable())->toBeTrue();
 });
 
-test('the linkedin card is connectable while either capability is enabled', function () {
+test('linkedin page follows its capability toggle while personal linkedin stays unavailable', function () {
     config(['trypost.platforms.linkedin.enabled' => true, 'trypost.platforms.linkedin-page.enabled' => false]);
-    expect(Platform::LinkedIn->isConnectable())->toBeTrue();
+    expect(Platform::LinkedIn->isConnectable())->toBeFalse();
+    expect(Platform::LinkedInPage->isConnectable())->toBeFalse();
 
     config(['trypost.platforms.linkedin.enabled' => false, 'trypost.platforms.linkedin-page.enabled' => true]);
-    expect(Platform::LinkedIn->isConnectable())->toBeTrue();
+    expect(Platform::LinkedIn->isConnectable())->toBeFalse();
+    expect(Platform::LinkedInPage->isConnectable())->toBeTrue();
 
     config(['trypost.platforms.linkedin.enabled' => false, 'trypost.platforms.linkedin-page.enabled' => false]);
     expect(Platform::LinkedIn->isConnectable())->toBeFalse();
-
-    // A company page never gets its own card regardless of toggles.
-    config(['trypost.platforms.linkedin-page.enabled' => true]);
     expect(Platform::LinkedInPage->isConnectable())->toBeFalse();
 });

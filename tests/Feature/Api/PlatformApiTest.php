@@ -46,6 +46,10 @@ it('lists content types per platform', function () {
         ]);
 
     $platforms = collect($response->json('platforms'));
+    expect($platforms->pluck('platform'))
+        ->not->toContain('linkedin')
+        ->toContain('linkedin-page');
+
     $instagramTypes = collect($platforms->firstWhere('platform', 'instagram')['content_types']);
     $facebookTypes = collect($platforms->firstWhere('platform', 'facebook')['content_types']);
     $pinterestTypes = collect($platforms->firstWhere('platform', 'pinterest')['content_types']);

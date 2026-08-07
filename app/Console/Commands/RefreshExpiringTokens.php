@@ -28,6 +28,7 @@ class RefreshExpiringTokens extends Command
         $count = 0;
 
         SocialAccount::query()
+            ->available()
             ->where('status', Status::Connected)
             ->whereNotNull('token_expires_at')
             ->where(function (Builder $query) {

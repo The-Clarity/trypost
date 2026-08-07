@@ -20,13 +20,14 @@ beforeEach(function () {
 });
 
 test('list returns wrapped social_accounts array with SocialAccountResource shape', function () {
-    SocialAccount::factory()->create([
+    SocialAccount::factory()->linkedin()->create([
         'workspace_id' => $this->workspace->id,
-        'platform' => Platform::LinkedIn,
     ]);
-    SocialAccount::factory()->create([
+    SocialAccount::factory()->linkedinPage()->create([
         'workspace_id' => $this->workspace->id,
-        'platform' => Platform::X,
+    ]);
+    SocialAccount::factory()->x()->create([
+        'workspace_id' => $this->workspace->id,
     ]);
 
     $response = TryPostServer::actingAs($this->user)
@@ -39,14 +40,15 @@ test('list returns wrapped social_accounts array with SocialAccountResource shap
                     ->missing('access_token')
                     ->missing('refresh_token')
                     ->missing('workspace_id');
-            });
+            })
+                ->where('social_accounts.0.platform', Platform::LinkedInPage->value)
+                ->where('social_accounts.1.platform', Platform::X->value);
         });
 });
 
 test('list only returns own workspace accounts', function () {
-    SocialAccount::factory()->create([
+    SocialAccount::factory()->linkedinPage()->create([
         'workspace_id' => $this->workspace->id,
-        'platform' => Platform::LinkedIn,
     ]);
 
     $otherWorkspace = Workspace::factory()->create();
@@ -65,9 +67,8 @@ test('list only returns own workspace accounts', function () {
 });
 
 test('list never exposes access_token or refresh_token', function () {
-    SocialAccount::factory()->create([
+    SocialAccount::factory()->linkedinPage()->create([
         'workspace_id' => $this->workspace->id,
-        'platform' => Platform::LinkedIn,
         'access_token' => 'secret-token-123',
     ]);
 
@@ -79,9 +80,8 @@ test('list never exposes access_token or refresh_token', function () {
 });
 
 test('toggle returns updated SocialAccountResource', function () {
-    $account = SocialAccount::factory()->create([
+    $account = SocialAccount::factory()->linkedinPage()->create([
         'workspace_id' => $this->workspace->id,
-        'platform' => Platform::LinkedIn,
         'is_active' => true,
     ]);
 
@@ -92,7 +92,7 @@ test('toggle returns updated SocialAccountResource', function () {
         ->assertStructuredContent(function (AssertableJson $json) use ($account) {
             $json->where('id', $account->id)
                 ->where('is_active', false)
-                ->where('platform', 'linkedin')
+                ->where('platform', 'linkedin-page')
                 ->etc();
         });
 
@@ -100,9 +100,8 @@ test('toggle returns updated SocialAccountResource', function () {
 });
 
 test('toggle inactive account becomes active', function () {
-    $account = SocialAccount::factory()->create([
+    $account = SocialAccount::factory()->linkedinPage()->create([
         'workspace_id' => $this->workspace->id,
-        'platform' => Platform::LinkedIn,
         'is_active' => false,
     ]);
 
@@ -115,9 +114,8 @@ test('toggle inactive account becomes active', function () {
 
 test('cannot toggle account from another workspace', function () {
     $otherWorkspace = Workspace::factory()->create();
-    $account = SocialAccount::factory()->create([
+    $account = SocialAccount::factory()->linkedinPage()->create([
         'workspace_id' => $otherWorkspace->id,
-        'platform' => Platform::LinkedIn,
     ]);
 
     $response = TryPostServer::actingAs($this->user)

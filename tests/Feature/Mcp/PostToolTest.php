@@ -3,7 +3,6 @@
 declare(strict_types=1);
 
 use App\Enums\Post\CreatedVia;
-use App\Enums\SocialAccount\Platform;
 use App\Enums\UserWorkspace\Role;
 use App\Mcp\Servers\TryPostServer;
 use App\Mcp\Tools\Post\CreatePostTool;
@@ -25,9 +24,8 @@ beforeEach(function () {
     $this->workspace->members()->attach($this->user->id, ['role' => Role::Member->value]);
     $this->user->update(['current_workspace_id' => $this->workspace->id]);
 
-    $this->socialAccount = SocialAccount::factory()->create([
+    $this->socialAccount = SocialAccount::factory()->linkedinPage()->create([
         'workspace_id' => $this->workspace->id,
-        'platform' => Platform::LinkedIn,
     ]);
 });
 
@@ -121,13 +119,13 @@ test('create post creates unscheduled draft without a schedule', function (strin
         'omitted' => [
             'content' => 'Draft without schedule',
             'platforms' => [
-                ['social_account_id' => $this->socialAccount->id, 'content_type' => 'linkedin_post'],
+                ['social_account_id' => $this->socialAccount->id, 'content_type' => 'linkedin_page_post'],
             ],
         ],
         'null' => [
             'content' => 'Draft without schedule',
             'platforms' => [
-                ['social_account_id' => $this->socialAccount->id, 'content_type' => 'linkedin_post'],
+                ['social_account_id' => $this->socialAccount->id, 'content_type' => 'linkedin_page_post'],
             ],
             'scheduled_at' => null,
         ],
@@ -156,7 +154,7 @@ test('create post with platforms enables only those', function () {
         ->tool(CreatePostTool::class, [
             'content' => 'with platforms',
             'platforms' => [
-                ['social_account_id' => $this->socialAccount->id, 'content_type' => 'linkedin_post'],
+                ['social_account_id' => $this->socialAccount->id, 'content_type' => 'linkedin_page_post'],
             ],
         ]);
 
@@ -166,7 +164,7 @@ test('create post with platforms enables only those', function () {
     $enabled = $post->postPlatforms()->where('enabled', true)->get();
     expect($enabled)->toHaveCount(1);
     expect($enabled->first()->social_account_id)->toBe($this->socialAccount->id);
-    expect($enabled->first()->content_type->value)->toBe('linkedin_post');
+    expect($enabled->first()->content_type->value)->toBe('linkedin_page_post');
 });
 
 test('create post rejects scheduled_at in the past', function () {
@@ -177,16 +175,15 @@ test('create post rejects scheduled_at in the past', function () {
 });
 
 test('create post rejects an inactive social account', function () {
-    $inactive = SocialAccount::factory()->create([
+    $inactive = SocialAccount::factory()->linkedinPage()->create([
         'workspace_id' => $this->workspace->id,
-        'platform' => Platform::LinkedIn,
         'is_active' => false,
     ]);
 
     $response = TryPostServer::actingAs($this->user)
         ->tool(CreatePostTool::class, [
             'platforms' => [
-                ['social_account_id' => $inactive->id, 'content_type' => 'linkedin_post'],
+                ['social_account_id' => $inactive->id, 'content_type' => 'linkedin_page_post'],
             ],
         ]);
 
@@ -255,7 +252,7 @@ test('create post rejects a label_id from another workspace', function () {
     $response = TryPostServer::actingAs($this->user)
         ->tool(CreatePostTool::class, [
             'platforms' => [
-                ['social_account_id' => $this->socialAccount->id, 'content_type' => 'linkedin_post'],
+                ['social_account_id' => $this->socialAccount->id, 'content_type' => 'linkedin_page_post'],
             ],
             'label_ids' => [$foreignLabel->id],
         ]);
@@ -306,7 +303,7 @@ test('create post persists platform meta (aspect_ratio)', function () {
     $response = TryPostServer::actingAs($this->user)
         ->tool(CreatePostTool::class, [
             'platforms' => [
-                ['social_account_id' => $this->socialAccount->id, 'content_type' => 'linkedin_post', 'meta' => ['aspect_ratio' => '4:5']],
+                ['social_account_id' => $this->socialAccount->id, 'content_type' => 'linkedin_page_post', 'meta' => ['aspect_ratio' => '4:5']],
             ],
         ]);
 
@@ -321,7 +318,7 @@ test('create post rejects an invalid aspect_ratio', function () {
     $response = TryPostServer::actingAs($this->user)
         ->tool(CreatePostTool::class, [
             'platforms' => [
-                ['social_account_id' => $this->socialAccount->id, 'content_type' => 'linkedin_post', 'meta' => ['aspect_ratio' => '3:2']],
+                ['social_account_id' => $this->socialAccount->id, 'content_type' => 'linkedin_page_post', 'meta' => ['aspect_ratio' => '3:2']],
             ],
         ]);
 
@@ -353,7 +350,7 @@ test('create post returns the platform meta in the response (read-back)', functi
     TryPostServer::actingAs($this->user)
         ->tool(CreatePostTool::class, [
             'platforms' => [
-                ['social_account_id' => $this->socialAccount->id, 'content_type' => 'linkedin_post', 'meta' => ['aspect_ratio' => '4:5']],
+                ['social_account_id' => $this->socialAccount->id, 'content_type' => 'linkedin_page_post', 'meta' => ['aspect_ratio' => '4:5']],
             ],
         ])
         ->assertOk()

@@ -24,6 +24,10 @@ class ConnectionVerifier
      */
     public function verify(SocialAccount $account): bool
     {
+        if (! $account->isAvailableForUse()) {
+            throw new TokenExpiredException("{$account->platform->label()} is not available for this deployment");
+        }
+
         // Hard-expired tokens cannot make API calls — refresh is mandatory.
         // For tokens that are still valid OR only "expiring soon", try the
         // verify endpoint FIRST with the current access_token. This avoids
@@ -83,7 +87,7 @@ class ConnectionVerifier
     private function callVerifyEndpoint(SocialAccount $account): bool
     {
         return match ($account->platform) {
-            Platform::LinkedIn => $this->verifyLinkedIn($account),
+            Platform::LinkedIn => throw new TokenExpiredException('Personal LinkedIn is not available for this deployment'),
             Platform::LinkedInPage => $this->verifyLinkedInPage($account),
             Platform::X => $this->verifyX($account),
             Platform::Instagram, Platform::InstagramFacebook => $this->verifyInstagram($account),
@@ -110,6 +114,10 @@ class ConnectionVerifier
      */
     public function refreshToken(SocialAccount $account): void
     {
+        if (! $account->isAvailableForUse()) {
+            throw new TokenExpiredException("{$account->platform->label()} is not available for this deployment");
+        }
+
         $lock = Cache::lock("token_refresh:{$account->id}", 30);
 
         if (! $lock->get()) {
@@ -121,7 +129,7 @@ class ConnectionVerifier
 
         try {
             match ($account->platform) {
-                Platform::LinkedIn, Platform::LinkedInPage => $this->refreshLinkedInToken($account),
+                Platform::LinkedInPage => $this->refreshLinkedInPageToken($account),
                 Platform::X => $this->refreshXToken($account),
                 Platform::Bluesky => $this->refreshBlueskyToken($account),
                 Platform::YouTube => $this->refreshYouTubeToken($account),
@@ -138,18 +146,18 @@ class ConnectionVerifier
         }
     }
 
-    private function refreshLinkedInToken(SocialAccount $account): void
+    private function refreshLinkedInPageToken(SocialAccount $account): void
     {
         if (! $account->refresh_token) {
             throw new TokenExpiredException("No refresh token available for {$account->platform->label()} account");
         }
 
-        $response = TokenRefreshClient::for($account->platform)->send(fn () => Http::asForm()
-            ->post(config('trypost.platforms.linkedin.oauth_api').'/oauth/v2/accessToken', [
+        $response = TokenRefreshClient::for(Platform::LinkedInPage)->send(fn () => Http::asForm()
+            ->post(config('trypost.platforms.linkedin-page.oauth_api').'/oauth/v2/accessToken', [
                 'grant_type' => 'refresh_token',
                 'refresh_token' => $account->refresh_token,
-                'client_id' => config('services.linkedin.client_id'),
-                'client_secret' => config('services.linkedin.client_secret'),
+                'client_id' => config('services.linkedin-page.client_id'),
+                'client_secret' => config('services.linkedin-page.client_secret'),
             ]));
 
         $data = $response->json();
@@ -354,22 +362,6 @@ class ConnectionVerifier
         ]);
 
         $account->refresh();
-    }
-
-    private function verifyLinkedIn(SocialAccount $account): bool
-    {
-        $response = Http::withToken($account->access_token)
-            ->withHeaders([
-                'X-Restli-Protocol-Version' => '2.0.0',
-                'LinkedIn-Version' => '202601',
-            ])
-            ->get(config('trypost.platforms.linkedin.api').'/rest/userinfo');
-
-        if ($response->status() === 401) {
-            throw new TokenExpiredException('LinkedIn access token is invalid or expired');
-        }
-
-        return $response->successful();
     }
 
     private function verifyLinkedInPage(SocialAccount $account): bool

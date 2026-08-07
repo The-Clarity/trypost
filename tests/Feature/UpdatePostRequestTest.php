@@ -279,15 +279,14 @@ test('pinterest board error does not block other platforms in multi-platform pub
         'meta' => [],
     ]);
 
-    $linkedinAccount = SocialAccount::factory()->create([
+    $linkedinAccount = SocialAccount::factory()->linkedinPage()->create([
         'workspace_id' => $this->workspace->id,
-        'platform' => Platform::LinkedIn,
     ]);
     $linkedinPlatform = PostPlatform::factory()->create([
         'post_id' => $this->post->id,
         'social_account_id' => $linkedinAccount->id,
-        'platform' => Platform::LinkedIn,
-        'content_type' => ContentType::LinkedInPost,
+        'platform' => Platform::LinkedInPage,
+        'content_type' => ContentType::LinkedInPagePost,
         'meta' => [],
     ]);
 
@@ -314,7 +313,7 @@ test('pinterest board error does not block other platforms in multi-platform pub
                 ],
                 [
                     'id' => $linkedinPlatform->id,
-                    'content_type' => ContentType::LinkedInPost->value,
+                    'content_type' => ContentType::LinkedInPagePost->value,
                     'meta' => [],
                 ],
             ],

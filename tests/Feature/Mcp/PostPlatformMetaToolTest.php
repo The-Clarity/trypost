@@ -55,14 +55,14 @@ test('create post persists Discord channel + embeds meta', function () {
 });
 
 test('create post persists LinkedIn document_title meta', function () {
-    $linkedin = SocialAccount::factory()->create(['workspace_id' => $this->workspace->id, 'platform' => Platform::LinkedIn]);
+    $linkedin = SocialAccount::factory()->linkedinPage()->create(['workspace_id' => $this->workspace->id]);
 
     $response = TryPostServer::actingAs($this->user)
         ->tool(CreatePostTool::class, [
             'content' => 'Check our latest deck',
             'platforms' => [[
                 'social_account_id' => $linkedin->id,
-                'content_type' => ContentType::LinkedInPost->value,
+                'content_type' => ContentType::LinkedInPagePost->value,
                 'meta' => ['document_title' => 'Q2 Report'],
             ]],
         ]);
@@ -104,14 +104,14 @@ test('update post merges per-platform meta', function () {
 test('publish guard ignores disabled platforms missing meta', function () {
     Queue::fake();
 
-    $linkedin = SocialAccount::factory()->create(['workspace_id' => $this->workspace->id, 'platform' => Platform::LinkedIn]);
+    $linkedin = SocialAccount::factory()->linkedinPage()->create(['workspace_id' => $this->workspace->id]);
 
     $post = Post::factory()->create([
         'workspace_id' => $this->workspace->id,
         'user_id' => $this->user->id,
         'status' => PostStatus::Draft,
     ]);
-    PostPlatform::factory()->linkedin()->create([
+    PostPlatform::factory()->linkedinPage()->create([
         'post_id' => $post->id,
         'social_account_id' => $linkedin->id,
         'enabled' => true,
@@ -178,7 +178,7 @@ test('publish guard enforces required meta for TikTok and Pinterest', function (
 ]);
 
 test('attach media from upload accepts a PDF for a LinkedIn post', function () {
-    $linkedin = SocialAccount::factory()->create(['workspace_id' => $this->workspace->id, 'platform' => Platform::LinkedIn]);
+    $linkedin = SocialAccount::factory()->linkedinPage()->create(['workspace_id' => $this->workspace->id]);
 
     $post = Post::factory()->create([
         'workspace_id' => $this->workspace->id,
@@ -187,7 +187,7 @@ test('attach media from upload accepts a PDF for a LinkedIn post', function () {
     ]);
     PostPlatform::factory()->create([
         'post_id' => $post->id, 'social_account_id' => $linkedin->id,
-        'platform' => Platform::LinkedIn, 'content_type' => ContentType::LinkedInPost, 'enabled' => true,
+        'platform' => Platform::LinkedInPage, 'content_type' => ContentType::LinkedInPagePost, 'enabled' => true,
     ]);
 
     $uploadToken = (string) Str::uuid();
@@ -220,7 +220,7 @@ test('attach media from upload accepts a PDF for a LinkedIn post', function () {
 test('publish post succeeds for a LinkedIn document that has a PDF', function () {
     Queue::fake();
 
-    $linkedin = SocialAccount::factory()->create(['workspace_id' => $this->workspace->id, 'platform' => Platform::LinkedIn]);
+    $linkedin = SocialAccount::factory()->linkedinPage()->create(['workspace_id' => $this->workspace->id]);
 
     $post = Post::factory()->create([
         'workspace_id' => $this->workspace->id,
@@ -233,7 +233,7 @@ test('publish post succeeds for a LinkedIn document that has a PDF', function ()
     ]);
     PostPlatform::factory()->create([
         'post_id' => $post->id, 'social_account_id' => $linkedin->id,
-        'platform' => Platform::LinkedIn, 'content_type' => ContentType::LinkedInPost, 'enabled' => true,
+        'platform' => Platform::LinkedInPage, 'content_type' => ContentType::LinkedInPagePost, 'enabled' => true,
     ]);
 
     $response = TryPostServer::actingAs($this->user)
@@ -244,7 +244,7 @@ test('publish post succeeds for a LinkedIn document that has a PDF', function ()
 });
 
 test('publish post rejects a LinkedIn post that mixes a PDF with an image', function () {
-    $linkedin = SocialAccount::factory()->create(['workspace_id' => $this->workspace->id, 'platform' => Platform::LinkedIn]);
+    $linkedin = SocialAccount::factory()->linkedinPage()->create(['workspace_id' => $this->workspace->id]);
 
     $post = Post::factory()->create([
         'workspace_id' => $this->workspace->id,
@@ -257,7 +257,7 @@ test('publish post rejects a LinkedIn post that mixes a PDF with an image', func
     ]);
     PostPlatform::factory()->create([
         'post_id' => $post->id, 'social_account_id' => $linkedin->id,
-        'platform' => Platform::LinkedIn, 'content_type' => ContentType::LinkedInPost, 'enabled' => true,
+        'platform' => Platform::LinkedInPage, 'content_type' => ContentType::LinkedInPagePost, 'enabled' => true,
     ]);
 
     $response = TryPostServer::actingAs($this->user)

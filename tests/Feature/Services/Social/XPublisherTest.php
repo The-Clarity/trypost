@@ -42,6 +42,11 @@ function isXMediaUploadStatusRequest(Request $request): bool
 }
 
 beforeEach(function () {
+    config([
+        'services.x.client_id' => 'test-x-client-id',
+        'services.x.client_secret' => 'test-x-client-secret',
+    ]);
+
     $this->user = User::factory()->create();
     $this->workspace = Workspace::factory()->create(['user_id' => $this->user->id]);
 

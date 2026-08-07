@@ -64,6 +64,16 @@ test('index filters by platform', function () {
         );
 });
 
+test('index does not expose compatibility-only personal LinkedIn templates', function () {
+    $this->actingAs($this->user)
+        ->get(route('app.post-templates.index', ['platform' => 'linkedin_post']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('posts/templates/Index')
+            ->has('templates.data', 0)
+        );
+});
+
 test('apply creates post and returns post_id and redirect_url', function () {
     Http::fake(['api.unsplash.com/*' => Http::response(['results' => []])]);
 
@@ -124,6 +134,12 @@ test('apply requires authentication', function () {
 test('apply returns 404 for unknown slug', function () {
     $this->actingAs($this->user)
         ->postJson(route('app.post-templates.apply', 'this-slug-does-not-exist'))
+        ->assertNotFound();
+});
+
+test('apply returns 404 for compatibility-only personal LinkedIn template', function () {
+    $this->actingAs($this->user)
+        ->postJson(route('app.post-templates.apply', 'product_launch_announcement'))
         ->assertNotFound();
 });
 

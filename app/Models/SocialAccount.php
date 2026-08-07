@@ -237,8 +237,53 @@ class SocialAccount extends Model
         return $this->status === Status::Disconnected || $this->status === Status::TokenExpired;
     }
 
+    public static function configuredLinkedInPageOrganizationId(): ?string
+    {
+        $organizationId = trim((string) config('trypost.platforms.linkedin-page.organization_id'));
+
+        return preg_match('/^[1-9][0-9]*$/D', $organizationId) === 1
+            ? $organizationId
+            : null;
+    }
+
+    public function isAvailableForUse(): bool
+    {
+        if (! $this->platform->isSupported()) {
+            return false;
+        }
+
+        if ($this->platform !== SocialPlatform::LinkedInPage) {
+            return true;
+        }
+
+        $configuredOrganizationId = self::configuredLinkedInPageOrganizationId();
+
+        return $configuredOrganizationId !== null
+            && hash_equals($configuredOrganizationId, (string) $this->platform_user_id)
+            && hash_equals($configuredOrganizationId, (string) data_get($this->meta, 'organization_id'));
+    }
+
+    public function scopeAvailable(Builder $query): Builder
+    {
+        $configuredOrganizationId = self::configuredLinkedInPageOrganizationId();
+
+        return $query
+            ->whereIn('platform', SocialPlatform::supportedValues())
+            ->where(function (Builder $query) use ($configuredOrganizationId): void {
+                $query->where('platform', '!=', SocialPlatform::LinkedInPage->value);
+
+                if ($configuredOrganizationId !== null) {
+                    $query->orWhere(function (Builder $query) use ($configuredOrganizationId): void {
+                        $query->where('platform', SocialPlatform::LinkedInPage->value)
+                            ->where('platform_user_id', $configuredOrganizationId)
+                            ->where('meta->organization_id', $configuredOrganizationId);
+                    });
+                }
+            });
+    }
+
     public function scopeActive(Builder $query): Builder
     {
-        return $query->where('is_active', true)->orderBy('platform');
+        return $query->available()->where('is_active', true)->orderBy('platform');
     }
 }

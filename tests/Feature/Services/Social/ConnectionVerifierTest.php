@@ -10,12 +10,23 @@ use App\Services\Social\ConnectionVerifier;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 
+beforeEach(function () {
+    config([
+        'services.linkedin-page.client_id' => 'test-linkedin-page-client-id',
+        'services.linkedin-page.client_secret' => 'test-linkedin-page-client-secret',
+        'trypost.platforms.linkedin-page.organization_id' => '123456',
+        'services.x.client_id' => 'test-x-client-id',
+        'services.x.client_secret' => 'test-x-client-secret',
+    ]);
+});
+
 test('verifies account without refresh when token is not expired', function () {
     Http::fake([
-        'api.linkedin.com/*' => Http::response(['sub' => '123'], 200),
+        'api.linkedin.com/*' => Http::response(['elements' => []], 200),
     ]);
 
-    $account = SocialAccount::factory()->linkedin()->create([
+    $account = SocialAccount::factory()->linkedinPage()->create([
+        'platform_user_id' => '123456',
         'token_expires_at' => now()->addDays(30),
     ]);
 
@@ -25,20 +36,21 @@ test('verifies account without refresh when token is not expired', function () {
     expect($result)->toBeTrue();
 
     Http::assertSentCount(1);
-    Http::assertSent(fn ($request) => str_contains($request->url(), 'api.linkedin.com/rest/userinfo'));
+    Http::assertSent(fn ($request) => str_contains($request->url(), 'api.linkedin.com/rest/organizationAcls'));
 });
 
-test('refreshes linkedin token before verifying when expired', function () {
+test('refreshes linkedin page token before verifying when expired', function () {
     Http::fake([
         'www.linkedin.com/oauth/v2/accessToken' => Http::response([
             'access_token' => 'new_token',
             'refresh_token' => 'new_refresh_token',
             'expires_in' => 5184000,
         ], 200),
-        'api.linkedin.com/*' => Http::response(['sub' => '123'], 200),
+        'api.linkedin.com/*' => Http::response(['elements' => []], 200),
     ]);
 
-    $account = SocialAccount::factory()->linkedin()->create([
+    $account = SocialAccount::factory()->linkedinPage()->create([
+        'platform_user_id' => '123456',
         'token_expires_at' => now()->subHour(),
         'refresh_token' => 'old_refresh_token',
     ]);
@@ -52,22 +64,38 @@ test('refreshes linkedin token before verifying when expired', function () {
     Http::assertSent(fn ($request) => str_contains($request->url(), 'linkedin.com/oauth/v2/accessToken'));
 });
 
-test('refreshing one linkedin row leaves a sibling linkedin-page row untouched', function () {
+test('legacy personal linkedin rows cannot refresh', function () {
+    Http::fake();
+    $person = SocialAccount::factory()->linkedin()->create(['refresh_token' => 'old_refresh_token']);
+
+    expect(fn () => (new ConnectionVerifier)->refreshToken($person))
+        ->toThrow(TokenExpiredException::class, 'LinkedIn is not available for this deployment');
+    Http::assertNothingSent();
+});
+
+test('refreshing a linkedin page token uses the page oauth application credentials', function () {
     Http::fake([
         'www.linkedin.com/oauth/v2/accessToken' => Http::response([
-            'access_token' => 'new_token',
-            'refresh_token' => 'new_refresh_token',
+            'access_token' => 'new_page_token',
+            'refresh_token' => 'new_page_refresh_token',
             'expires_in' => 5184000,
         ], 200),
     ]);
 
-    $person = SocialAccount::factory()->linkedin()->create(['refresh_token' => 'old_refresh_token']);
-    $page = SocialAccount::factory()->linkedinPage()->create(['refresh_token' => 'old_refresh_token']);
+    $page = SocialAccount::factory()->linkedinPage()->create([
+        'platform_user_id' => '123456',
+        'refresh_token' => 'old_page_refresh_token',
+    ]);
 
-    (new ConnectionVerifier)->refreshToken($person);
+    (new ConnectionVerifier)->refreshToken($page);
 
-    expect($person->fresh()->refresh_token)->toBe('new_refresh_token');
-    expect($page->fresh()->refresh_token)->toBe('old_refresh_token');
+    Http::assertSent(function ($request) {
+        $data = $request->data();
+
+        return str_contains($request->url(), 'linkedin.com/oauth/v2/accessToken')
+            && data_get($data, 'client_id') === 'test-linkedin-page-client-id'
+            && data_get($data, 'client_secret') === 'test-linkedin-page-client-secret';
+    });
 });
 
 test('refreshes x token before verifying when expired', function () {
@@ -206,12 +234,13 @@ test('refreshes threads token before verifying when expired', function () {
     Http::assertSent(fn ($request) => str_contains($request->url(), 'refresh_access_token'));
 });
 
-test('throws exception when linkedin refresh fails', function () {
+test('throws exception when linkedin page refresh fails', function () {
     Http::fake([
         'www.linkedin.com/oauth/v2/accessToken' => Http::response(['error' => 'invalid_grant'], 400),
     ]);
 
-    $account = SocialAccount::factory()->linkedin()->create([
+    $account = SocialAccount::factory()->linkedinPage()->create([
+        'platform_user_id' => '123456',
         'token_expires_at' => now()->subHour(),
         'refresh_token' => 'old_refresh_token',
     ]);
@@ -219,7 +248,7 @@ test('throws exception when linkedin refresh fails', function () {
     $verifier = new ConnectionVerifier;
 
     expect(fn () => $verifier->verify($account))
-        ->toThrow(TokenExpiredException::class, 'Failed to refresh LinkedIn token');
+        ->toThrow(TokenExpiredException::class, 'Failed to refresh LinkedIn Page token');
 });
 
 test('throws exception when x refresh fails', function () {
@@ -322,11 +351,12 @@ test('instagram refresh records a 60-day expiry when the response omits expires_
 
 test('does NOT refresh proactively when token still works (lazy refresh)', function () {
     Http::fake([
-        'api.linkedin.com/*' => Http::response(['sub' => '123'], 200),
+        'api.linkedin.com/*' => Http::response(['elements' => []], 200),
     ]);
 
     // Token is "expiring soon" but access_token still works.
-    $account = SocialAccount::factory()->linkedin()->create([
+    $account = SocialAccount::factory()->linkedinPage()->create([
+        'platform_user_id' => '123456',
         'token_expires_at' => now()->addMinutes(10),
         'refresh_token' => 'old_refresh_token',
     ]);
@@ -337,7 +367,7 @@ test('does NOT refresh proactively when token still works (lazy refresh)', funct
 
     // Refresh endpoint must NOT have been called — verify worked without it.
     Http::assertNotSent(fn ($request) => str_contains($request->url(), 'oauth/v2/accessToken'));
-    Http::assertSent(fn ($request) => str_contains($request->url(), 'api.linkedin.com/rest/userinfo'));
+    Http::assertSent(fn ($request) => str_contains($request->url(), 'api.linkedin.com/rest/organizationAcls'));
 });
 
 test('refreshes lazily on 401 then retries verify', function () {
@@ -353,7 +383,8 @@ test('refreshes lazily on 401 then retries verify', function () {
         ], 200),
     ]);
 
-    $account = SocialAccount::factory()->linkedin()->create([
+    $account = SocialAccount::factory()->linkedinPage()->create([
+        'platform_user_id' => '123456',
         'token_expires_at' => now()->addHours(2),
         'refresh_token' => 'old_refresh_token',
     ]);
@@ -371,7 +402,8 @@ test('throws when verify returns 401 AND refresh also fails', function () {
         'www.linkedin.com/oauth/v2/accessToken' => Http::response(['error' => 'invalid_grant'], 400),
     ]);
 
-    $account = SocialAccount::factory()->linkedin()->create([
+    $account = SocialAccount::factory()->linkedinPage()->create([
+        'platform_user_id' => '123456',
         'token_expires_at' => now()->addHours(2),
         'refresh_token' => 'old_refresh_token',
     ]);
@@ -388,10 +420,11 @@ test('forces refresh when token is hard-expired', function () {
             'refresh_token' => 'new_refresh_token',
             'expires_in' => 5184000,
         ], 200),
-        'api.linkedin.com/*' => Http::response(['sub' => '123'], 200),
+        'api.linkedin.com/*' => Http::response(['elements' => []], 200),
     ]);
 
-    $account = SocialAccount::factory()->linkedin()->create([
+    $account = SocialAccount::factory()->linkedinPage()->create([
+        'platform_user_id' => '123456',
         'token_expires_at' => now()->subMinutes(5),
         'refresh_token' => 'old_refresh_token',
     ]);
@@ -408,7 +441,8 @@ test('throws when refresh fails AND token is hard-expired', function () {
         'www.linkedin.com/oauth/v2/accessToken' => Http::response(['error' => 'invalid_grant'], 400),
     ]);
 
-    $account = SocialAccount::factory()->linkedin()->create([
+    $account = SocialAccount::factory()->linkedinPage()->create([
+        'platform_user_id' => '123456',
         'token_expires_at' => now()->subMinutes(5),
         'refresh_token' => 'old_refresh_token',
     ]);

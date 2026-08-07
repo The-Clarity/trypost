@@ -30,6 +30,11 @@ class UpdatePostRequest extends FormRequest
     public function rules(): array
     {
         $status = $this->input('status');
+        $availablePlatformIds = $this->route('post')
+            ->postPlatforms()
+            ->whereHas('socialAccount', fn ($query) => $query->active())
+            ->pluck('id')
+            ->all();
 
         $enforcesPlatformLimits = in_array(
             $status,
@@ -50,7 +55,7 @@ class UpdatePostRequest extends FormRequest
             ],
             ...PostMediaRules::rules(hosted: false),
             'platforms' => ['sometimes', 'array'],
-            'platforms.*.id' => ['required', 'uuid', Rule::exists('post_platforms', 'id')->where('post_id', $this->route('post')->id)],
+            'platforms.*.id' => ['required', 'uuid', Rule::in($availablePlatformIds)],
             'platforms.*.content_type' => [
                 'sometimes',
                 'string',
@@ -139,6 +144,7 @@ class UpdatePostRequest extends FormRequest
 
         return PostPlatform::query()
             ->where('post_id', $post->id)
+            ->whereHas('socialAccount', fn ($query) => $query->active())
             ->whereIn('id', $ids)
             ->pluck('platform', 'id');
     }

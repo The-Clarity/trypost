@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\PostTemplate;
 
+use App\Enums\PostPlatform\ContentType;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 
@@ -24,6 +25,10 @@ final class Registry
     public function all(string $locale, ?string $platform = null): Collection
     {
         $key = "{$locale}:".($platform ?? '*');
+
+        if ($platform !== null && ! $this->isSelectablePlatform($platform)) {
+            return $this->cache[$key] ??= collect();
+        }
 
         return $this->cache[$key] ??= $this->loadFromDisk($locale, $platform);
     }
@@ -96,6 +101,7 @@ final class Registry
 
         return collect($files)
             ->map(fn (string $f) => basename($f, '.php'))
+            ->filter(fn (string $platform) => $this->isSelectablePlatform($platform))
             ->values();
     }
 
@@ -143,6 +149,7 @@ final class Registry
         }
 
         return collect($files)
+            ->filter(fn (string $file) => $this->isSelectablePlatform(basename($file, '.php')))
             ->flatMap(function (string $file): array {
                 $platformName = basename($file, '.php');
                 $rows = require $file;
@@ -162,5 +169,14 @@ final class Registry
     private function localePath(string $locale): string
     {
         return base_path("templates/{$locale}");
+    }
+
+    private function isSelectablePlatform(string $platform): bool
+    {
+        if ($platform === ContentType::CAROUSEL_FORMAT) {
+            return true;
+        }
+
+        return ContentType::tryFrom($platform)?->platform()->isSupported() === true;
     }
 }

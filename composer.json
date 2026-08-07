@@ -125,6 +125,10 @@
             "@test",
             "@php artisan test tests/Browser"
         ],
+        "production:prepare": [
+            "@php artisan migrate --force",
+            "@php artisan db:seed --class='Database\\Seeders\\PassportSeeder' --force"
+        ],
         "post-autoload-dump": [
             "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",
             "@php artisan package:discover --ansi"

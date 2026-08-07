@@ -27,18 +27,18 @@ test('blocks a second account of the same network', function () {
     ]))->toThrow(NetworkAlreadyConnectedException::class);
 });
 
-test('collapses platform variants into one network', function () {
+test('a compatibility-only personal linkedin row does not block the supported page', function () {
     SocialAccount::factory()->create([
         'workspace_id' => $this->workspace->id,
         'platform' => Platform::LinkedIn,
         'platform_user_id' => 'li-profile',
     ]);
 
-    expect(fn () => SocialAccount::factory()->create([
+    $page = SocialAccount::factory()->linkedinPage()->create([
         'workspace_id' => $this->workspace->id,
-        'platform' => Platform::LinkedInPage,
-        'platform_user_id' => 'li-page',
-    ]))->toThrow(NetworkAlreadyConnectedException::class);
+    ]);
+
+    expect($page->exists)->toBeTrue();
 });
 
 test('allows different networks in the same workspace', function () {

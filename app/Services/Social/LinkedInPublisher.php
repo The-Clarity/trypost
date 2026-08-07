@@ -4,20 +4,18 @@ declare(strict_types=1);
 
 namespace App\Services\Social;
 
-use App\Enums\SocialAccount\Platform;
+use LogicException;
 
 /**
- * Publishes posts to a member's personal LinkedIn profile.
+ * Compatibility tombstone for the retired personal LinkedIn publisher.
+ *
+ * The class name remains loadable for historical references, but no runtime
+ * surface can construct a member publisher or reach member authoring code.
  */
-class LinkedInPublisher extends AbstractLinkedInPublisher
+final class LinkedInPublisher
 {
-    protected function platform(): Platform
+    public function __construct()
     {
-        return Platform::LinkedIn;
-    }
-
-    protected function authorUrn(): string
-    {
-        return "urn:li:person:{$this->account->platform_user_id}";
+        throw new LogicException('Personal LinkedIn publisher is unavailable.');
     }
 }

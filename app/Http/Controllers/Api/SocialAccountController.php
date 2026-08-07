@@ -23,7 +23,7 @@ class SocialAccountController extends Controller
 {
     public function index(Request $request): AnonymousResourceCollection
     {
-        $accounts = $request->user()->currentWorkspace->socialAccounts()->orderBy('platform')->get();
+        $accounts = $request->user()->currentWorkspace->socialAccounts()->available()->orderBy('platform')->get();
 
         return SocialAccountResource::collection($accounts);
     }

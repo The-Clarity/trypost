@@ -7,7 +7,7 @@ import { connect as discordConnect } from '@/routes/app/social/discord';
 import { connect as facebookConnect } from '@/routes/app/social/facebook';
 import { connect as instagramConnect } from '@/routes/app/social/instagram';
 import { connect as instagramFacebookConnect } from '@/routes/app/social/instagram-facebook';
-import { connect as linkedinConnect } from '@/routes/app/social/linkedin';
+import { connect as linkedinPageConnect } from '@/routes/app/social/linkedin-page';
 import { connect as mastodonConnect } from '@/routes/app/social/mastodon';
 import { connect as pinterestConnect } from '@/routes/app/social/pinterest';
 import { connect as threadsConnect } from '@/routes/app/social/threads';
@@ -25,7 +25,7 @@ const CONNECT_ROUTES: Record<string, { url: () => string }> = {
     [Platform.Facebook]: facebookConnect,
     [Platform.Instagram]: instagramConnect,
     [Platform.InstagramFacebook]: instagramFacebookConnect,
-    [Platform.LinkedIn]: linkedinConnect,
+    [Platform.LinkedInPage]: linkedinPageConnect,
     [Platform.Mastodon]: mastodonConnect,
     [Platform.Pinterest]: pinterestConnect,
     [Platform.Threads]: threadsConnect,

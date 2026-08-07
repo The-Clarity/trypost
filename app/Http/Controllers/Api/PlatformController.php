@@ -18,7 +18,9 @@ class PlatformController extends Controller
     public function contentTypes(): JsonResponse
     {
         return response()->json([
-            'platforms' => PlatformContentTypesResource::collection(Platform::cases())->resolve(),
+            'platforms' => PlatformContentTypesResource::collection(
+                array_values(array_filter(Platform::cases(), fn (Platform $platform): bool => $platform->isSupported())),
+            )->resolve(),
         ]);
     }
 }

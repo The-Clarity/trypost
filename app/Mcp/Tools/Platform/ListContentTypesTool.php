@@ -22,6 +22,10 @@ class ListContentTypesTool extends Tool
         $platforms = [];
 
         foreach (Platform::cases() as $platform) {
+            if (! $platform->isSupported()) {
+                continue;
+            }
+
             $contentTypes = array_map(
                 fn (ContentType $type) => $type->toListingArray(),
                 array_values(ContentType::forPlatform($platform)),

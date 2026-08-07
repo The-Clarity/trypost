@@ -26,9 +26,8 @@ test('accounts index requires authentication', function () {
 });
 
 test('accounts index shows platforms and connected accounts', function () {
-    SocialAccount::factory()->create([
+    SocialAccount::factory()->linkedinPage()->create([
         'workspace_id' => $this->workspace->id,
-        'platform' => Platform::LinkedIn,
     ]);
 
     $response = $this->actingAs($this->user)->get(route('app.accounts'));
@@ -43,19 +42,32 @@ test('accounts index shows platforms and connected accounts', function () {
     );
 });
 
-test('accounts index offers a single linkedin card and no standalone linkedin page card', function () {
+test('accounts index offers linkedin page without exposing personal linkedin', function () {
     $response = $this->actingAs($this->user)->get(route('app.accounts'));
 
     $response->assertOk();
     $response->assertInertia(fn ($page) => $page
         ->component('accounts/Index', false)
-        ->where('platforms', fn ($platforms) => collect($platforms)->contains('value', Platform::LinkedIn->value)
-            && ! collect($platforms)->contains('value', Platform::LinkedInPage->value)
+        ->where('platforms', fn ($platforms) => ! collect($platforms)->contains('value', Platform::LinkedIn->value)
+            && collect($platforms)->contains('value', Platform::LinkedInPage->value)
         )
     );
 });
 
-test('the linkedin card still shows when only company pages are enabled', function () {
+test('accounts index hides a stored legacy personal linkedin row', function () {
+    SocialAccount::factory()->linkedin()->create([
+        'workspace_id' => $this->workspace->id,
+    ]);
+
+    $this->actingAs($this->user)
+        ->get(route('app.accounts'))
+        ->assertInertia(fn ($page) => $page
+            ->component('accounts/Index', false)
+            ->has('connectedAccounts', 0)
+        );
+});
+
+test('only the linkedin page card shows when only company pages are enabled', function () {
     config(['trypost.platforms.linkedin.enabled' => false]);
     config(['trypost.platforms.linkedin-page.enabled' => true]);
 
@@ -63,11 +75,13 @@ test('the linkedin card still shows when only company pages are enabled', functi
 
     $response->assertInertia(fn ($page) => $page
         ->component('accounts/Index', false)
-        ->where('platforms', fn ($platforms) => collect($platforms)->contains('value', Platform::LinkedIn->value))
+        ->where('platforms', fn ($platforms) => ! collect($platforms)->contains('value', Platform::LinkedIn->value)
+            && collect($platforms)->contains('value', Platform::LinkedInPage->value)
+        )
     );
 });
 
-test('the linkedin card disappears only when both capabilities are disabled', function () {
+test('both linkedin cards disappear when both capabilities are disabled', function () {
     config(['trypost.platforms.linkedin.enabled' => false]);
     config(['trypost.platforms.linkedin-page.enabled' => false]);
 
@@ -75,11 +89,13 @@ test('the linkedin card disappears only when both capabilities are disabled', fu
 
     $response->assertInertia(fn ($page) => $page
         ->component('accounts/Index', false)
-        ->where('platforms', fn ($platforms) => ! collect($platforms)->contains('value', Platform::LinkedIn->value))
+        ->where('platforms', fn ($platforms) => ! collect($platforms)->contains('value', Platform::LinkedIn->value)
+            && ! collect($platforms)->contains('value', Platform::LinkedInPage->value)
+        )
     );
 });
 
-test('a connected linkedin page account is still returned so it surfaces under the linkedin card', function () {
+test('a connected linkedin page account is returned for the page card', function () {
     SocialAccount::factory()->linkedinPage()->create([
         'workspace_id' => $this->workspace->id,
     ]);
@@ -87,8 +103,6 @@ test('a connected linkedin page account is still returned so it surfaces under t
     $response = $this->actingAs($this->user)->get(route('app.accounts'));
 
     $response->assertOk();
-    // The grid groups by the account's own `network`, so a linkedin-page account
-    // must report network=linkedin to surface under the single LinkedIn card.
     $response->assertInertia(fn ($page) => $page
         ->component('accounts/Index', false)
         ->where('connectedAccounts.0.platform', Platform::LinkedInPage->value)

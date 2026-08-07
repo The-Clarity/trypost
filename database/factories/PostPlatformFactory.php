@@ -28,8 +28,8 @@ class PostPlatformFactory extends Factory
             'post_id' => Post::factory(),
             'social_account_id' => SocialAccount::factory(),
             'enabled' => true,
-            'platform' => Platform::LinkedIn,
-            'content_type' => ContentType::LinkedInPost,
+            'platform' => Platform::X,
+            'content_type' => ContentType::XPost,
             'status' => Status::Pending,
             'meta' => [],
         ];
@@ -64,6 +64,15 @@ class PostPlatformFactory extends Factory
     {
         return $this->state(fn (array $attributes) => [
             'platform' => Platform::LinkedIn,
+            'content_type' => ContentType::LinkedInPost,
+        ]);
+    }
+
+    public function linkedinPage(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'platform' => Platform::LinkedInPage,
+            'content_type' => ContentType::LinkedInPagePost,
         ]);
     }
 

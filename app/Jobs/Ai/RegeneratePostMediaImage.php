@@ -425,17 +425,17 @@ class RegeneratePostMediaImage implements ShouldQueue
     private function resolveSocialAccount(Post $post, Workspace $workspace): ?SocialAccount
     {
         $enabledAccount = $post->postPlatforms
-            ->first(fn ($platform) => $platform->enabled && $platform->socialAccount);
+            ->first(fn ($platform) => $platform->enabled && $platform->socialAccount?->isAvailableForUse());
 
         if ($enabledAccount?->socialAccount) {
             return $enabledAccount->socialAccount;
         }
 
         $anyAccount = $post->postPlatforms
-            ->first(fn ($platform) => $platform->socialAccount);
+            ->first(fn ($platform) => $platform->socialAccount?->isAvailableForUse());
 
         return $anyAccount?->socialAccount
-            ?? $workspace->socialAccounts()->first();
+            ?? $workspace->socialAccounts()->available()->first();
     }
 
     /**

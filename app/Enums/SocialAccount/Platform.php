@@ -48,7 +48,11 @@ enum Platform: string
     {
         return array_values(array_map(
             fn (self $platform): string => $platform->value,
-            array_filter(self::cases(), fn (self $platform): bool => $platform->network() === $this->network()),
+            array_filter(
+                self::cases(),
+                fn (self $platform): bool => $platform->network() === $this->network()
+                    && $platform->isSupported(),
+            ),
         ));
     }
 
@@ -256,7 +260,7 @@ enum Platform: string
             self::Facebook => ['pages_manage_posts'],
             self::TikTok => ['video.publish'],
             self::YouTube => ['https://www.googleapis.com/auth/youtube.upload'],
-            self::LinkedIn => ['w_member_social'],
+            self::LinkedIn => [],
             self::LinkedInPage => ['w_organization_social'],
             self::X => ['tweet.write'],
             self::Threads => ['threads_content_publish'],
@@ -375,19 +379,37 @@ enum Platform: string
     }
 
     /**
-     * Whether this platform gets its own "Connect" card in the accounts grid.
-     * LinkedIn company pages are reached through the unified LinkedIn connect
-     * flow's identity picker, never a standalone card. The single LinkedIn card
-     * stands for the whole network, so it shows whenever the profile OR the
-     * company-page capability is enabled (self-hosters may run with only one).
+     * Personal LinkedIn is retained only so historical enum and content-type
+     * values remain readable. It must never re-enter a deployed product path.
      */
+    public function isSupported(): bool
+    {
+        return $this !== self::LinkedIn;
+    }
+
+    /** @return array<int, string> */
+    public static function supportedValues(): array
+    {
+        return array_values(array_map(
+            fn (self $platform): string => $platform->value,
+            array_filter(self::cases(), fn (self $platform): bool => $platform->isSupported()),
+        ));
+    }
+
     public function isConnectable(): bool
     {
-        return match ($this) {
-            self::LinkedInPage => false,
-            self::LinkedIn => self::LinkedIn->isEnabled() || self::LinkedInPage->isEnabled(),
-            default => $this->isEnabled(),
-        };
+        if (! $this->isSupported() || ! $this->isEnabled()) {
+            return false;
+        }
+
+        if ($this === self::LinkedInPage) {
+            return preg_match(
+                '/^[1-9][0-9]*$/D',
+                trim((string) config('trypost.platforms.linkedin-page.organization_id')),
+            ) === 1;
+        }
+
+        return true;
     }
 
     /**

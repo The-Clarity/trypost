@@ -52,6 +52,12 @@ class HandleInertiaRequests extends Middleware
             'flash' => $request->session()->get('flash', []),
             'applicationUrl' => config('app.url'),
             'env' => config('app.env'),
+            'broadcasting' => [
+                'key' => (string) config('broadcasting.connections.reverb.key'),
+                'host' => (string) config('broadcasting.connections.reverb.options.host'),
+                'port' => (int) config('broadcasting.connections.reverb.options.port'),
+                'scheme' => (string) config('broadcasting.connections.reverb.options.scheme'),
+            ],
             'locale' => app()->getLocale(),
             'languages' => collect(config('languages.available'))->map(fn ($name, $code) => [
                 'code' => $code,

@@ -31,6 +31,7 @@ class VerifyWorkspaceConnections implements ShouldQueue
     public function handle(ConnectionVerifier $verifier): void
     {
         $accounts = $this->workspace->socialAccounts()
+            ->available()
             ->with('workspace.owner')
             ->whereIn('status', [Status::Connected, Status::TokenExpired])
             ->get();

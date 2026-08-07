@@ -51,7 +51,7 @@ class SocialController extends Controller
             'workspace' => $workspace,
             'platforms' => $platforms,
             'connectedAccounts' => SocialAccountResource::collection(
-                $workspace->socialAccounts()->orderBy('id')->get(),
+                $workspace->socialAccounts()->available()->orderBy('id')->get(),
             )->resolve(),
         ]);
     }

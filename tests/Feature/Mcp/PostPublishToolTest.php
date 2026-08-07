@@ -25,9 +25,8 @@ beforeEach(function () {
     $this->workspace->members()->attach($this->user->id, ['role' => Role::Member->value]);
     $this->user->update(['current_workspace_id' => $this->workspace->id]);
 
-    $this->socialAccount = SocialAccount::factory()->create([
+    $this->socialAccount = SocialAccount::factory()->linkedinPage()->create([
         'workspace_id' => $this->workspace->id,
-        'platform' => Platform::LinkedIn,
     ]);
 });
 
@@ -60,7 +59,7 @@ test('update post enables platforms', function () {
         'user_id' => $this->user->id,
     ]);
 
-    $platform = PostPlatform::factory()->linkedin()->create([
+    $platform = PostPlatform::factory()->linkedinPage()->create([
         'post_id' => $post->id,
         'social_account_id' => $this->socialAccount->id,
         'enabled' => false,
@@ -70,7 +69,7 @@ test('update post enables platforms', function () {
         ->tool(UpdatePostTool::class, [
             'post_id' => $post->id,
             'platforms' => [
-                ['id' => $platform->id, 'content_type' => ContentType::LinkedInPost->value],
+                ['id' => $platform->id, 'content_type' => ContentType::LinkedInPagePost->value],
             ],
         ]);
 
@@ -136,7 +135,7 @@ test('update post rejects a platforms[].id that belongs to another post', functi
         'user_id' => $this->user->id,
         'status' => PostStatus::Draft,
     ]);
-    $foreignPlatform = PostPlatform::factory()->linkedin()->create([
+    $foreignPlatform = PostPlatform::factory()->linkedinPage()->create([
         'post_id' => $otherPost->id,
         'social_account_id' => $this->socialAccount->id,
     ]);
@@ -145,7 +144,7 @@ test('update post rejects a platforms[].id that belongs to another post', functi
         ->tool(UpdatePostTool::class, [
             'post_id' => $myPost->id,
             'platforms' => [
-                ['id' => $foreignPlatform->id, 'content_type' => ContentType::LinkedInPost->value],
+                ['id' => $foreignPlatform->id, 'content_type' => ContentType::LinkedInPagePost->value],
             ],
         ]);
 
@@ -158,7 +157,7 @@ test('update post rejects a content_type that does not match the post_platform',
         'user_id' => $this->user->id,
         'status' => PostStatus::Draft,
     ]);
-    $postPlatform = PostPlatform::factory()->linkedin()->create([
+    $postPlatform = PostPlatform::factory()->linkedinPage()->create([
         'post_id' => $post->id,
         'social_account_id' => $this->socialAccount->id,
         'enabled' => true,
@@ -188,7 +187,7 @@ test('publish post immediate dispatches PublishPost job', function () {
         'scheduled_at' => null,
     ]);
 
-    PostPlatform::factory()->linkedin()->create([
+    PostPlatform::factory()->linkedinPage()->create([
         'post_id' => $post->id,
         'social_account_id' => $this->socialAccount->id,
         'enabled' => true,
@@ -218,7 +217,7 @@ test('publish post scheduled does not dispatch immediately', function () {
         'status' => PostStatus::Draft,
     ]);
 
-    PostPlatform::factory()->linkedin()->create([
+    PostPlatform::factory()->linkedinPage()->create([
         'post_id' => $post->id,
         'social_account_id' => $this->socialAccount->id,
         'enabled' => true,
@@ -243,7 +242,7 @@ test('publish post fails when no platforms enabled', function () {
         'status' => PostStatus::Draft,
     ]);
 
-    PostPlatform::factory()->linkedin()->create([
+    PostPlatform::factory()->linkedinPage()->create([
         'post_id' => $post->id,
         'social_account_id' => $this->socialAccount->id,
         'enabled' => false,
@@ -272,7 +271,7 @@ test('publish post rejects posts already in a terminal state', function (PostSta
         'status' => $status,
     ]);
 
-    PostPlatform::factory()->linkedin()->create([
+    PostPlatform::factory()->linkedinPage()->create([
         'post_id' => $post->id,
         'social_account_id' => $this->socialAccount->id,
     ]);

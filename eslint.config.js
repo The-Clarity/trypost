@@ -1,6 +1,5 @@
 import { defineConfigWithVueTs, vueTsConfigs } from '@vue/eslint-config-typescript';
 import prettier from 'eslint-config-prettier';
-import importPlugin from 'eslint-plugin-import';
 import vue from 'eslint-plugin-vue';
 
 export default defineConfigWithVueTs(
@@ -22,31 +21,10 @@ export default defineConfigWithVueTs(
         ],
     },
     {
-        plugins: {
-            import: importPlugin,
-        },
-        settings: {
-            'import/resolver': {
-                typescript: {
-                    alwaysTryTypes: true,
-                    project: './tsconfig.json',
-                },
-            },
-        },
         rules: {
             'vue/multi-word-component-names': 'off',
             '@typescript-eslint/no-explicit-any': 'off',
-            'import/order': [
-                'error',
-                {
-                    groups: ['builtin', 'external', 'internal', 'parent', 'sibling', 'index'],
-                    'newlines-between': 'always',
-                    alphabetize: {
-                        order: 'asc',
-                        caseInsensitive: true,
-                    },
-                },
-            ],
+            // prettier-plugin-organize-imports is the single import-order owner.
         },
     },
     prettier,

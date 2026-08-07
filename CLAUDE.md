@@ -327,7 +327,7 @@ Vue components must have a single root element.
 ## External Service URLs
 
 - NEVER hardcode third-party API hosts, OAuth endpoints, or per-platform service URLs (e.g. `https://api.x.com/2`, `https://www.linkedin.com/oauth/v2/accessToken`, `https://bsky.social`). They live in `config/trypost.php` under `platforms.<name>` with a matching `env(...)` default, so self-hosted users can override them and we have a single source of truth.
-    - Production code: `config('trypost.platforms.linkedin.oauth_api').'/oauth/v2/accessToken'`, never the literal URL.
+    - Production code: `config('trypost.platforms.linkedin-page.oauth_api').'/oauth/v2/accessToken'`, never the literal URL. Personal LinkedIn is a non-network compatibility tombstone.
     - Tests: use the same `config(...)` value in `Http::fake([...])` — `Http::fake([config('trypost.platforms.x.api').'/oauth2/token' => ...])`. Tests with hardcoded URLs drift silently when the config changes.
     - Path/route segments after the host (e.g. `/oauth/v2/accessToken`, `/xrpc/com.atproto.server.refreshSession`) are part of the provider's protocol spec — those stay inline next to the call. Only the host comes from config.
 

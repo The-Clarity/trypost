@@ -2,7 +2,6 @@
 
 declare(strict_types=1);
 
-use App\Enums\SocialAccount\Platform;
 use App\Enums\UserWorkspace\Role;
 use App\Mcp\Servers\TryPostServer;
 use App\Mcp\Tools\Label\CreateLabelTool;
@@ -54,9 +53,8 @@ beforeEach(function () {
 test('viewers can list labels signatures and social accounts via mcp', function () {
     WorkspaceLabel::factory()->create(['workspace_id' => $this->workspace->id]);
     WorkspaceSignature::factory()->create(['workspace_id' => $this->workspace->id]);
-    SocialAccount::factory()->create([
+    SocialAccount::factory()->linkedinPage()->create([
         'workspace_id' => $this->workspace->id,
-        'platform' => Platform::LinkedIn,
     ]);
 
     TryPostServer::actingAs($this->viewer)
@@ -148,9 +146,8 @@ test('viewers cannot manage labels or signatures via mcp', function () {
 });
 
 test('viewers cannot toggle social accounts or list compose helpers via mcp', function () {
-    $linkedin = SocialAccount::factory()->create([
+    $linkedin = SocialAccount::factory()->linkedinPage()->create([
         'workspace_id' => $this->workspace->id,
-        'platform' => Platform::LinkedIn,
         'is_active' => true,
     ]);
     $discord = SocialAccount::factory()->discord()->create([
@@ -176,9 +173,8 @@ test('viewers cannot toggle social accounts or list compose helpers via mcp', fu
 });
 
 test('members cannot toggle social accounts via mcp', function () {
-    $account = SocialAccount::factory()->create([
+    $account = SocialAccount::factory()->linkedinPage()->create([
         'workspace_id' => $this->workspace->id,
-        'platform' => Platform::LinkedIn,
         'is_active' => true,
     ]);
 
@@ -190,9 +186,8 @@ test('members cannot toggle social accounts via mcp', function () {
 });
 
 test('admins can toggle social accounts via mcp', function () {
-    $account = SocialAccount::factory()->create([
+    $account = SocialAccount::factory()->linkedinPage()->create([
         'workspace_id' => $this->workspace->id,
-        'platform' => Platform::LinkedIn,
         'is_active' => true,
     ]);
 

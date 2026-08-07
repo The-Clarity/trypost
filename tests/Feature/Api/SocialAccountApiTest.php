@@ -14,13 +14,19 @@ beforeEach(function () {
 });
 
 it('lists social accounts', function () {
-    SocialAccount::factory()->create([
+    SocialAccount::factory()->linkedin()->create([
         'workspace_id' => $this->workspace->id,
-        'platform' => Platform::LinkedIn,
     ]);
-    SocialAccount::factory()->create([
+    SocialAccount::factory()->linkedinPage()->create([
         'workspace_id' => $this->workspace->id,
-        'platform' => Platform::X,
+    ]);
+    $unauthorizedPage = SocialAccount::factory()->linkedinPage()->create([
+        'workspace_id' => $this->workspace->id,
+        'platform_user_id' => '999999',
+        'meta' => ['organization_id' => '999999'],
+    ]);
+    SocialAccount::factory()->x()->create([
+        'workspace_id' => $this->workspace->id,
     ]);
 
     $response = $this->getJson(route('api.social-accounts.index'), [
@@ -29,15 +35,17 @@ it('lists social accounts', function () {
 
     $response->assertOk();
     $response->assertJsonCount(2);
+    $response->assertJsonMissing(['platform' => Platform::LinkedIn->value]);
+    $response->assertJsonMissing(['id' => $unauthorizedPage->id]);
+    $response->assertJsonFragment(['platform' => Platform::LinkedInPage->value]);
     $response->assertJsonStructure([
         '*' => ['id', 'platform', 'display_name', 'username', 'is_active', 'status'],
     ]);
 });
 
 it('does not expose tokens in social accounts list', function () {
-    SocialAccount::factory()->create([
+    SocialAccount::factory()->linkedinPage()->create([
         'workspace_id' => $this->workspace->id,
-        'platform' => Platform::LinkedIn,
     ]);
 
     $response = $this->getJson(route('api.social-accounts.index'), [
@@ -50,9 +58,8 @@ it('does not expose tokens in social accounts list', function () {
 });
 
 it('toggles social account from active to inactive', function () {
-    $account = SocialAccount::factory()->create([
+    $account = SocialAccount::factory()->linkedinPage()->create([
         'workspace_id' => $this->workspace->id,
-        'platform' => Platform::LinkedIn,
         'is_active' => true,
     ]);
 
@@ -66,9 +73,8 @@ it('toggles social account from active to inactive', function () {
 });
 
 it('toggles social account from inactive to active', function () {
-    $account = SocialAccount::factory()->create([
+    $account = SocialAccount::factory()->linkedinPage()->create([
         'workspace_id' => $this->workspace->id,
-        'platform' => Platform::LinkedIn,
         'is_active' => false,
     ]);
 
@@ -83,9 +89,8 @@ it('toggles social account from inactive to active', function () {
 
 it('cannot toggle social account from another workspace', function () {
     $otherWorkspace = Workspace::factory()->create();
-    $account = SocialAccount::factory()->create([
+    $account = SocialAccount::factory()->linkedinPage()->create([
         'workspace_id' => $otherWorkspace->id,
-        'platform' => Platform::LinkedIn,
     ]);
 
     $response = $this->putJson(route('api.social-accounts.toggle', $account), [], [

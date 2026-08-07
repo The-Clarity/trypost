@@ -11,9 +11,12 @@ use App\Models\SocialAccount;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Services\Social\LinkedInPagePublisher;
+use App\Services\Social\LinkedInPublisher;
 use Illuminate\Support\Facades\Http;
 
 beforeEach(function () {
+    config(['trypost.platforms.linkedin-page.organization_id' => '123456']);
+
     $this->user = User::factory()->create();
     $this->workspace = Workspace::factory()->create(['user_id' => $this->user->id]);
 
@@ -24,8 +27,6 @@ beforeEach(function () {
         'token_expires_at' => now()->addDays(60),
         'meta' => [
             'organization_id' => '123456',
-            'admin_user_id' => 'user123',
-            'admin_name' => 'John Doe',
         ],
     ]);
 
@@ -67,6 +68,15 @@ test('linkedin page publisher can publish text-only post', function () {
     });
 });
 
+test('legacy personal linkedin publisher cannot be constructed', function () {
+    Http::fake();
+
+    expect(fn () => app(LinkedInPublisher::class))
+        ->toThrow(LogicException::class, 'Personal LinkedIn publisher is unavailable.');
+
+    Http::assertNothingSent();
+});
+
 test('linkedin page publisher uses organization urn', function () {
     Http::fake([
         config('trypost.platforms.linkedin-page.api').'/rest/posts' => Http::response(null, 201, [
@@ -89,6 +99,29 @@ test('linkedin page publisher throws exception when organization id missing', fu
         ->toThrow(Exception::class, 'LinkedIn Page organization ID not configured');
 
     // Fail-fast: the missing org id must abort before any LinkedIn request.
+    Http::assertNothingSent();
+});
+
+test('linkedin page publisher rejects an organization outside the clarity page allowlist', function () {
+    Http::fake();
+    $this->socialAccount->update([
+        'platform_user_id' => '999999',
+        'meta' => ['organization_id' => '999999'],
+    ]);
+
+    expect(fn () => $this->publisher->publish($this->postPlatform))
+        ->toThrow(Exception::class, 'LinkedIn Page is not authorized for this deployment');
+
+    Http::assertNothingSent();
+});
+
+test('linkedin page publisher fails closed when no organization is configured', function () {
+    Http::fake();
+    config(['trypost.platforms.linkedin-page.organization_id' => null]);
+
+    expect(fn () => $this->publisher->publish($this->postPlatform))
+        ->toThrow(Exception::class, 'LinkedIn Page organization ID is not configured');
+
     Http::assertNothingSent();
 });
 
@@ -127,7 +160,7 @@ test('linkedin page publisher throws token expired exception on auth error after
             'code' => 'EXPIRED_ACCESS_TOKEN',
             'message' => 'The token used in the request has expired',
         ], 401),
-        config('trypost.platforms.linkedin.oauth_api').'/oauth/v2/accessToken' => Http::response([
+        config('trypost.platforms.linkedin-page.oauth_api').'/oauth/v2/accessToken' => Http::response([
             'error' => 'invalid_grant',
             'error_description' => 'The refresh token is invalid',
         ], 400),
@@ -141,7 +174,7 @@ test('linkedin page publisher refreshes token when expired', function () {
     $this->socialAccount->update(['token_expires_at' => now()->subHour()]);
 
     Http::fake([
-        config('trypost.platforms.linkedin.oauth_api').'/oauth/v2/accessToken' => Http::response([
+        config('trypost.platforms.linkedin-page.oauth_api').'/oauth/v2/accessToken' => Http::response([
             'access_token' => 'new-access-token',
             'refresh_token' => 'new-refresh-token',
             'expires_in' => 5184000,
@@ -175,7 +208,7 @@ test('linkedin page publisher throws TokenExpiredException when refresh_token is
     $this->socialAccount->update(['token_expires_at' => now()->subHour()]);
 
     Http::fake([
-        config('trypost.platforms.linkedin.oauth_api').'/oauth/v2/accessToken' => Http::response([
+        config('trypost.platforms.linkedin-page.oauth_api').'/oauth/v2/accessToken' => Http::response([
             'error' => 'invalid_grant',
             'error_description' => 'The refresh token is invalid',
         ], 400),

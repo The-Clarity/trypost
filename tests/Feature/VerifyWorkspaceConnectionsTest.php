@@ -22,11 +22,29 @@ test('job does nothing when workspace has no connected accounts', function () {
     Mail::assertNothingSent();
 });
 
+test('job leaves legacy personal linkedin rows inert', function () {
+    Mail::fake();
+
+    $workspace = Workspace::factory()->create();
+    $legacyAccount = SocialAccount::factory()->linkedin()->create([
+        'workspace_id' => $workspace->id,
+    ]);
+
+    $verifier = mock(ConnectionVerifier::class);
+    $verifier->shouldNotReceive('verify');
+    app()->instance(ConnectionVerifier::class, $verifier);
+
+    VerifyWorkspaceConnections::dispatch($workspace);
+
+    expect($legacyAccount->fresh()->status)->toBe(Status::Connected);
+    Mail::assertNothingSent();
+});
+
 test('job does not send email when all connections are valid', function () {
     Mail::fake();
 
     $workspace = Workspace::factory()->create();
-    SocialAccount::factory()->linkedin()->create(['workspace_id' => $workspace->id]);
+    SocialAccount::factory()->linkedinPage()->create(['workspace_id' => $workspace->id]);
     SocialAccount::factory()->x()->create(['workspace_id' => $workspace->id]);
 
     $verifier = mock(ConnectionVerifier::class);
@@ -43,7 +61,7 @@ test('job marks account as token expired on first failure and disconnected on se
     Mail::fake();
 
     $workspace = Workspace::factory()->create();
-    $account = SocialAccount::factory()->linkedin()->create(['workspace_id' => $workspace->id]);
+    $account = SocialAccount::factory()->linkedinPage()->create(['workspace_id' => $workspace->id]);
 
     $verifier = mock(ConnectionVerifier::class);
     $verifier->shouldReceive('verify')
@@ -72,7 +90,7 @@ test('job sends single email with all failed accounts', function () {
     Mail::fake();
 
     $workspace = Workspace::factory()->create();
-    $account1 = SocialAccount::factory()->linkedin()->create(['workspace_id' => $workspace->id]);
+    $account1 = SocialAccount::factory()->linkedinPage()->create(['workspace_id' => $workspace->id]);
     $account2 = SocialAccount::factory()->x()->create(['workspace_id' => $workspace->id]);
 
     $verifier = mock(ConnectionVerifier::class);
@@ -98,7 +116,7 @@ test('job only includes failed accounts in email', function () {
     Mail::fake();
 
     $workspace = Workspace::factory()->create();
-    $validAccount = SocialAccount::factory()->linkedin()->create(['workspace_id' => $workspace->id]);
+    $validAccount = SocialAccount::factory()->linkedinPage()->create(['workspace_id' => $workspace->id]);
     $invalidAccount = SocialAccount::factory()->x()->create(['workspace_id' => $workspace->id]);
 
     $verifier = mock(ConnectionVerifier::class);
@@ -145,7 +163,7 @@ test('job skips already disconnected accounts', function () {
     Mail::fake();
 
     $workspace = Workspace::factory()->create();
-    SocialAccount::factory()->linkedin()->disconnected()->create(['workspace_id' => $workspace->id]);
+    SocialAccount::factory()->linkedinPage()->disconnected()->create(['workspace_id' => $workspace->id]);
 
     $verifier = mock(ConnectionVerifier::class);
     $verifier->shouldNotReceive('verify');

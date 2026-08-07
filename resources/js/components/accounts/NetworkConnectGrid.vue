@@ -67,9 +67,9 @@ const platformTheme: Record<
         rotate: 'rotate-1',
         image: '/images/accounts/facebook.png',
     },
-    linkedin: {
+    'linkedin-page': {
         bg: 'bg-blue-200',
-        rotate: '-rotate-1',
+        rotate: 'rotate-1',
         image: '/images/accounts/linkedin.png',
     },
     x: {
@@ -122,27 +122,24 @@ const platformTheme: Record<
 const themeFor = (value: string) =>
     platformTheme[value] ?? { bg: 'bg-muted', rotate: '', image: '' };
 
-// One account per network: map each connected network to its account so every
-// platform card belonging to that network reflects the connection.
-const connectedByNetwork = computed((): Record<string, ConnectedAccount> => {
+const connectedByPlatform = computed((): Record<string, ConnectedAccount> => {
     const map: Record<string, ConnectedAccount> = {};
 
     for (const account of props.connectedAccounts) {
-        if (!map[account.network]) {
-            map[account.network] = account;
+        if (!map[account.platform]) {
+            map[account.platform] = account;
         }
     }
 
     return map;
 });
 
-// platform value -> the account occupying its network (if any).
 const cardConnection = computed(
     (): Record<string, ConnectedAccount | undefined> => {
         const map: Record<string, ConnectedAccount | undefined> = {};
 
         for (const platform of props.platforms) {
-            map[platform.value] = connectedByNetwork.value[platform.network];
+            map[platform.value] = connectedByPlatform.value[platform.value];
         }
 
         return map;
@@ -174,9 +171,6 @@ const disconnectAccount = (account: ConnectedAccount) => {
 const needsReconnect = (account: ConnectedAccount): boolean =>
     account.status === 'disconnected' || account.status === 'token_expired';
 
-const connectEntryFor = (platformValue: string): string =>
-    platformValue === Platform.LinkedInPage ? Platform.LinkedIn : platformValue;
-
 const openConnect = (platformValue: string) => {
     if (platformValue === Platform.Telegram) {
         telegramOpen.value = true;
@@ -195,7 +189,7 @@ const connectPlatform = (platformValue: string) => {
 };
 
 const reconnectAccount = (account: ConnectedAccount) => {
-    openConnect(connectEntryFor(account.platform));
+    openConnect(account.platform);
 };
 
 const CardState = {
@@ -210,7 +204,7 @@ const cardState = computed((): Record<string, CardStateValue> => {
     const map: Record<string, CardStateValue> = {};
 
     for (const platform of props.platforms) {
-        const account = connectedByNetwork.value[platform.network];
+        const account = connectedByPlatform.value[platform.value];
         map[platform.value] = !account
             ? CardState.Connect
             : needsReconnect(account)

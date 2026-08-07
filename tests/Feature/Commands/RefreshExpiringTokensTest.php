@@ -14,8 +14,9 @@ test('it dispatches refresh jobs for rotating tokens near expiry and extension t
 
     $workspace = Workspace::factory()->create();
 
-    // Rotating platform expiring in 15 minutes — inside the 30-minute window.
-    $rotatingSoon = SocialAccount::factory()->create([
+    // Legacy personal LinkedIn is a compatibility-only row and must remain inert,
+    // even when its old token is near expiry.
+    $legacyLinkedIn = SocialAccount::factory()->create([
         'workspace_id' => $workspace->id,
         'platform' => Platform::LinkedIn,
         'status' => Status::Connected,
@@ -83,8 +84,8 @@ test('it dispatches refresh jobs for rotating tokens near expiry and extension t
     $this->artisan('social:refresh-expiring-tokens')
         ->assertSuccessful();
 
-    Queue::assertPushed(RefreshSocialToken::class, 4);
-    Queue::assertPushed(RefreshSocialToken::class, fn ($job) => $job->account->id === $rotatingSoon->id);
+    Queue::assertPushed(RefreshSocialToken::class, 3);
+    Queue::assertNotPushed(RefreshSocialToken::class, fn ($job) => $job->account->id === $legacyLinkedIn->id);
     Queue::assertPushed(RefreshSocialToken::class, fn ($job) => $job->account->id === $extensionSoon->id);
     Queue::assertPushed(RefreshSocialToken::class, fn ($job) => $job->account->id === $extensionLater->id);
     Queue::assertPushed(RefreshSocialToken::class, fn ($job) => $job->account->id === $rotatingExpired->id);

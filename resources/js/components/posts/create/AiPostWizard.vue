@@ -86,7 +86,6 @@ const AI_FORMATS: Array<{ value: AiFormat; platforms: string[] }> = [
     { value: ContentType.InstagramFeed, platforms: ['instagram', 'instagram-facebook'] },
     { value: CAROUSEL_FORMAT, platforms: ['instagram', 'instagram-facebook'] },
     { value: ContentType.InstagramStory, platforms: ['instagram', 'instagram-facebook'] },
-    { value: ContentType.LinkedInPost, platforms: ['linkedin'] },
     { value: ContentType.LinkedInPagePost, platforms: ['linkedin-page'] },
     { value: ContentType.XPost, platforms: ['x'] },
     { value: ContentType.BlueskyPost, platforms: ['bluesky'] },
@@ -143,7 +142,6 @@ const requiresImage = computed(() =>
 );
 const supportsOptionalImages = computed(() =>
     selectedFormat.value === ContentType.InstagramFeed ||
-    selectedFormat.value === ContentType.LinkedInPost ||
     selectedFormat.value === ContentType.LinkedInPagePost ||
     selectedFormat.value === ContentType.XPost ||
     selectedFormat.value === ContentType.BlueskyPost ||

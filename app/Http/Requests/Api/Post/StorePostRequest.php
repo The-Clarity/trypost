@@ -25,6 +25,11 @@ class StorePostRequest extends FormRequest
     public function rules(): array
     {
         $workspaceId = $this->user()->currentWorkspace->id;
+        $availableAccountIds = $this->user()->currentWorkspace
+            ->socialAccounts()
+            ->active()
+            ->pluck('id')
+            ->all();
 
         return [
             'content' => [
@@ -41,9 +46,7 @@ class StorePostRequest extends FormRequest
             'platforms.*.social_account_id' => [
                 'required',
                 'uuid',
-                Rule::exists('social_accounts', 'id')
-                    ->where('workspace_id', $workspaceId)
-                    ->where('is_active', true),
+                Rule::in($availableAccountIds),
             ],
             'platforms.*.content_type' => [
                 'required',
@@ -96,6 +99,7 @@ class StorePostRequest extends FormRequest
         }
 
         return SocialAccount::query()
+            ->available()
             ->where('workspace_id', $workspaceId)
             ->whereIn('id', $accountIds)
             ->pluck('platform', 'id');

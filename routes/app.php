@@ -91,7 +91,7 @@ Route::middleware(['auth'])->group(function () {
     // lives here too (and not behind EnsureAccountReady) so it works before a
     // subscription exists; the controller still authorizes workspace ownership.
     Route::middleware(EnsureHasWorkspace::class)->group(function () {
-        Route::get('connect/linkedin', [LinkedInController::class, 'connect'])->name('app.social.linkedin.connect');
+        Route::get('connect/linkedin-page', [LinkedInController::class, 'connectPage'])->name('app.social.linkedin-page.connect');
         Route::get('connect/x', [XController::class, 'connect'])->name('app.social.x.connect');
         Route::get('connect/tiktok', [TikTokController::class, 'connect'])->name('app.social.tiktok.connect');
         Route::get('connect/youtube', [YouTubeController::class, 'connect'])->name('app.social.youtube.connect');
@@ -114,9 +114,12 @@ Route::middleware(['auth'])->group(function () {
     // session set when the flow started, then self-close the popup. They run
     // without the current-workspace gate so a momentarily missing current
     // workspace can't HTML-redirect the popup instead of closing it cleanly.
-    Route::get('accounts/linkedin/callback', [LinkedInController::class, 'callback'])->name('app.social.linkedin.callback');
-    Route::get('accounts/linkedin/select', [LinkedInController::class, 'selectIdentity'])->name('app.social.linkedin.select-identity');
-    Route::post('accounts/linkedin/select', [LinkedInController::class, 'select'])->name('app.social.linkedin.select');
+    Route::get('accounts/linkedin/callback', [LinkedInController::class, 'callback'])
+        ->block(60, 5)
+        ->name('app.social.linkedin.callback');
+    Route::post('accounts/linkedin/select', [LinkedInController::class, 'select'])
+        ->block(60, 5)
+        ->name('app.social.linkedin.select');
 
     Route::get('accounts/x/callback', [XController::class, 'callback'])->name('app.social.x.callback');
 

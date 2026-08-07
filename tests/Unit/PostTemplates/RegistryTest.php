@@ -22,6 +22,13 @@ test('all() with platform filter only returns templates for that platform', func
     expect($carousels->every(fn ($t) => $t->platform === 'instagram_carousel'))->toBeTrue();
 });
 
+test('all() excludes compatibility-only personal LinkedIn templates', function () {
+    $templates = $this->registry->all('en');
+
+    expect($templates->pluck('platform'))->not->toContain('linkedin_post');
+    expect($this->registry->all('en', 'linkedin_post'))->toBeEmpty();
+});
+
 test('find() returns the requested template by slug', function () {
     $template = $this->registry->find('feature_launch_carousel', 'en');
 
@@ -32,6 +39,10 @@ test('find() returns the requested template by slug', function () {
 
 test('find() throws when slug does not exist', function () {
     $this->registry->find('this-slug-does-not-exist', 'en');
+})->throws(TemplateNotFoundException::class);
+
+test('find() rejects compatibility-only personal LinkedIn template slugs', function () {
+    $this->registry->find('product_launch_announcement', 'en');
 })->throws(TemplateNotFoundException::class);
 
 test('all() falls back to default locale when locale folder is missing', function () {
@@ -88,11 +99,12 @@ test('allSlugs() returns unique slugs from default locale', function () {
     expect($slugs->count())->toBe($slugs->unique()->count());
 });
 
-test('allPlatforms() returns every platform filename', function () {
+test('allPlatforms() returns only selectable platforms', function () {
     $platforms = $this->registry->allPlatforms();
 
     expect($platforms)->toContain('instagram_carousel');
-    expect($platforms)->toContain('linkedin_post');
+    expect($platforms)->toContain('linkedin_page_post');
+    expect($platforms)->not->toContain('linkedin_post');
 });
 
 test('allLocales() returns every locale subdirectory', function () {

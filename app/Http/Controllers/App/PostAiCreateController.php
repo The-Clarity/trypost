@@ -32,6 +32,7 @@ class PostAiCreateController extends Controller
 
         if ($socialAccountId) {
             $owned = SocialAccount::where('id', $socialAccountId)
+                ->available()
                 ->where('workspace_id', $workspace->id)
                 ->exists();
 

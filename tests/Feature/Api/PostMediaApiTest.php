@@ -2,7 +2,6 @@
 
 declare(strict_types=1);
 
-use App\Enums\SocialAccount\Platform;
 use App\Models\Media;
 use App\Models\Post;
 use App\Models\PostPlatform;
@@ -22,9 +21,8 @@ beforeEach(function () {
     $this->workspace = $result['workspace'];
     $this->plainToken = $result['plain_token'];
 
-    $this->socialAccount = SocialAccount::factory()->create([
+    $this->socialAccount = SocialAccount::factory()->linkedinPage()->create([
         'workspace_id' => $this->workspace->id,
-        'platform' => Platform::LinkedIn,
     ]);
 
     $this->post = Post::factory()->create([
@@ -32,7 +30,7 @@ beforeEach(function () {
         'user_id' => $this->user->id,
     ]);
 
-    PostPlatform::factory()->linkedin()->create([
+    PostPlatform::factory()->linkedinPage()->create([
         'post_id' => $this->post->id,
         'social_account_id' => $this->socialAccount->id,
         'enabled' => true,
@@ -297,7 +295,7 @@ it('downloads and hosts an external media url when creating a post', function ()
             'content' => 'External media post',
             'media' => [['url' => 'https://93.184.216.34/listing.jpg']],
             'platforms' => [
-                ['social_account_id' => $this->socialAccount->id, 'content_type' => 'linkedin_post'],
+                ['social_account_id' => $this->socialAccount->id, 'content_type' => 'linkedin_page_post'],
             ],
         ])
         ->assertCreated();
@@ -329,7 +327,7 @@ it('persists alt text submitted on a bare external media url', function () {
                 'meta' => ['alt_text' => 'A red car parked on a hill'],
             ]],
             'platforms' => [
-                ['social_account_id' => $this->socialAccount->id, 'content_type' => 'linkedin_post'],
+                ['social_account_id' => $this->socialAccount->id, 'content_type' => 'linkedin_page_post'],
             ],
         ])
         ->assertCreated();
@@ -350,7 +348,7 @@ it('rejects creating a post when an external media url cannot be fetched', funct
             'content' => 'Broken media post',
             'media' => [['url' => 'https://93.184.216.34/missing.jpg']],
             'platforms' => [
-                ['social_account_id' => $this->socialAccount->id, 'content_type' => 'linkedin_post'],
+                ['social_account_id' => $this->socialAccount->id, 'content_type' => 'linkedin_page_post'],
             ],
         ])
         ->assertUnprocessable()
@@ -380,7 +378,7 @@ it('rolls back already-hosted media when another url in the batch fails', functi
                 ['url' => 'https://93.184.216.34/missing.jpg'],
             ],
             'platforms' => [
-                ['social_account_id' => $this->socialAccount->id, 'content_type' => 'linkedin_post'],
+                ['social_account_id' => $this->socialAccount->id, 'content_type' => 'linkedin_page_post'],
             ],
         ])
         ->assertUnprocessable()
@@ -410,7 +408,7 @@ it('rejects and rolls back when a media url connection fails (timeout/dns)', fun
                 ['url' => 'https://93.184.216.34/timeout.jpg'],
             ],
             'platforms' => [
-                ['social_account_id' => $this->socialAccount->id, 'content_type' => 'linkedin_post'],
+                ['social_account_id' => $this->socialAccount->id, 'content_type' => 'linkedin_page_post'],
             ],
         ])
         ->assertUnprocessable()
@@ -431,7 +429,7 @@ it('rejects creating a post when an external media url is not a supported type',
             'content' => 'Bad type post',
             'media' => [['url' => 'https://93.184.216.34/notes.txt']],
             'platforms' => [
-                ['social_account_id' => $this->socialAccount->id, 'content_type' => 'linkedin_post'],
+                ['social_account_id' => $this->socialAccount->id, 'content_type' => 'linkedin_page_post'],
             ],
         ])
         ->assertUnprocessable()
@@ -460,7 +458,7 @@ it('keeps an already-hosted item and a freshly-hosted url in order', function ()
                 ['url' => 'https://93.184.216.34/external.jpg'],
             ],
             'platforms' => [
-                ['social_account_id' => $this->socialAccount->id, 'content_type' => 'linkedin_post'],
+                ['social_account_id' => $this->socialAccount->id, 'content_type' => 'linkedin_page_post'],
             ],
         ])
         ->assertCreated();
@@ -489,7 +487,7 @@ it('passes already-hosted media through on create without downloading', function
                 'type' => 'image',
             ]],
             'platforms' => [
-                ['social_account_id' => $this->socialAccount->id, 'content_type' => 'linkedin_post'],
+                ['social_account_id' => $this->socialAccount->id, 'content_type' => 'linkedin_page_post'],
             ],
         ])
         ->assertCreated();
@@ -552,7 +550,7 @@ it('accepts and persists media alt text on create', function () {
                 'meta' => ['alt_text' => 'A description of the photo'],
             ]],
             'platforms' => [
-                ['social_account_id' => $this->socialAccount->id, 'content_type' => 'linkedin_post'],
+                ['social_account_id' => $this->socialAccount->id, 'content_type' => 'linkedin_page_post'],
             ],
         ])
         ->assertCreated();
@@ -621,7 +619,7 @@ it('rejects media alt text over 2000 characters', function () {
                 'meta' => ['alt_text' => str_repeat('a', 2001)],
             ]],
             'platforms' => [
-                ['social_account_id' => $this->socialAccount->id, 'content_type' => 'linkedin_post'],
+                ['social_account_id' => $this->socialAccount->id, 'content_type' => 'linkedin_page_post'],
             ],
         ])
         ->assertUnprocessable()

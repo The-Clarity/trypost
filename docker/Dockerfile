@@ -10,6 +10,8 @@
 ARG PHP_VERSION=8.4
 ARG NODE_VERSION=22
 
+FROM node:${NODE_VERSION}-bookworm-slim AS node-runtime
+
 # ----------------------------------------------------------------------------
 # Stage 1: system-base — PHP-FPM + system packages + extensions
 # ----------------------------------------------------------------------------
@@ -89,10 +91,9 @@ RUN composer install \
 # invokes `php artisan wayfinder:generate` during vite build — splitting
 # the stages would mean the vite phase has no PHP available.
 #
-# Vite inlines VITE_* values into the JS bundle at build time. Pass them
-# as build args (--build-arg VITE_REVERB_APP_KEY=...) so the bundle reaches
-# the browser with the correct Reverb/PostHog config. Runtime env vars on
-# the container have no effect on the already-compiled bundle.
+# Reverb settings are provided by Laravel in the initial Inertia payload, so
+# the same image can be promoted through environments without rebuilding it.
+# PostHog remains optional build-time instrumentation.
 # ----------------------------------------------------------------------------
 FROM composer-deps AS asset-build
 
@@ -100,10 +101,6 @@ FROM composer-deps AS asset-build
 RUN apk add --no-cache nodejs npm
 
 ARG VITE_APP_NAME=TryPost
-ARG VITE_REVERB_APP_KEY=
-ARG VITE_REVERB_HOST=localhost
-ARG VITE_REVERB_PORT=8080
-ARG VITE_REVERB_SCHEME=http
 ARG VITE_POSTHOG_ENABLED=false
 ARG VITE_POSTHOG_API_KEY=
 ARG VITE_POSTHOG_HOST=https://us.i.posthog.com
@@ -114,10 +111,6 @@ ENV APP_KEY=base64:c3R1Yi13YXlmaW5kZXItZ2VuLWtleS1mb3ItYnVpbGRpbmctYXNzZXRzMA== 
     APP_DEBUG=false \
     APP_URL=http://localhost \
     VITE_APP_NAME=${VITE_APP_NAME} \
-    VITE_REVERB_APP_KEY=${VITE_REVERB_APP_KEY} \
-    VITE_REVERB_HOST=${VITE_REVERB_HOST} \
-    VITE_REVERB_PORT=${VITE_REVERB_PORT} \
-    VITE_REVERB_SCHEME=${VITE_REVERB_SCHEME} \
     VITE_POSTHOG_ENABLED=${VITE_POSTHOG_ENABLED} \
     VITE_POSTHOG_API_KEY=${VITE_POSTHOG_API_KEY} \
     VITE_POSTHOG_HOST=${VITE_POSTHOG_HOST}
@@ -138,6 +131,76 @@ RUN composer dump-autoload --no-scripts --optimize \
     && npm ci --no-audit --no-fund \
     && npm run build \
     && npm run build:ssr
+
+# ----------------------------------------------------------------------------
+# Stage 5: ci — short-lived quality gate (never promoted to production)
+# ----------------------------------------------------------------------------
+FROM php:${PHP_VERSION}-cli-bookworm AS ci
+
+COPY --from=node-runtime /usr/local /usr/local
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        curl \
+        git \
+        unzip \
+        postgresql-client \
+        libpq-dev \
+        libpng-dev \
+        libjpeg62-turbo-dev \
+        libfreetype6-dev \
+        libwebp-dev \
+        libavif-dev \
+        libzip-dev \
+        libonig-dev \
+        libicu-dev \
+    && docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp --with-avif \
+    && docker-php-ext-install -j"$(nproc)" \
+        pdo_pgsql \
+        pgsql \
+        gd \
+        zip \
+        opcache \
+        bcmath \
+        exif \
+        pcntl \
+        intl \
+        sockets \
+    && pecl install redis \
+    && docker-php-ext-enable redis \
+    && rm -rf /var/lib/apt/lists/* /tmp/pear
+
+WORKDIR /var/www/html
+
+# Exercise media handling under the same bounded PHP memory ceiling as the
+# production runtime. The CLI base otherwise defaults to 128M, below the
+# application's supported GD image workload.
+COPY docker/php.prod.ini /usr/local/etc/php/conf.d/99-trypost.ini
+
+# Composer's package-discovery hook boots Laravel while the CI image is built.
+# Provide only inert build-time values here; clarity/ci.sh replaces them with
+# .env.ci before any test or migration runs.
+ENV APP_ENV=testing \
+    APP_KEY=base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= \
+    APP_URL=http://localhost
+
+COPY composer.json composer.lock package.json package-lock.json ./
+RUN composer install --no-scripts --no-interaction --prefer-dist --optimize-autoloader \
+    && npm ci --no-audit --no-fund \
+    && npx playwright install --with-deps chromium
+
+COPY . .
+
+RUN mkdir -p storage/framework/cache/data \
+             storage/framework/sessions \
+             storage/framework/views \
+             storage/logs \
+             bootstrap/cache \
+    && composer dump-autoload --optimize \
+    && install -D -m 0755 clarity/ci.sh /clarity/ci.sh
+
+ENTRYPOINT ["/clarity/ci.sh"]
 
 # ----------------------------------------------------------------------------
 # Stage 6: dev — local development image (bind-mount the source at runtime)
@@ -210,6 +273,7 @@ RUN mkdir -p /var/lib/nginx /var/log/nginx /run/nginx \
         /run/nginx
 
 RUN composer dump-autoload --optimize --classmap-authoritative --no-scripts \
+    && ln -s ../storage/app/public /var/www/html/public/storage \
     && chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
 
 USER www-data

@@ -24,14 +24,14 @@ class SocialAccountFactory extends Factory
     {
         return [
             'workspace_id' => Workspace::factory(),
-            'platform' => Platform::LinkedIn,
+            'platform' => Platform::X,
             'platform_user_id' => $this->faker->uuid(),
             'username' => $this->faker->userName(),
             'display_name' => $this->faker->name(),
             'access_token' => $this->faker->sha256(),
             'refresh_token' => $this->faker->sha256(),
             'token_expires_at' => now()->addDays(60),
-            'scopes' => [],
+            'scopes' => Platform::X->requiredPublishScopes(),
             'meta' => [],
             'status' => Status::Connected,
         ];
@@ -47,10 +47,18 @@ class SocialAccountFactory extends Factory
 
     public function linkedinPage(): static
     {
-        return $this->state(fn (array $attributes) => [
-            'platform' => Platform::LinkedInPage,
-            'scopes' => Platform::LinkedInPage->requiredPublishScopes(),
-        ]);
+        return $this->state(function (array $attributes): array {
+            $organizationId = SocialAccount::configuredLinkedInPageOrganizationId() ?? '123456';
+
+            return [
+                'platform' => Platform::LinkedInPage,
+                'platform_user_id' => $organizationId,
+                'scopes' => Platform::LinkedInPage->requiredPublishScopes(),
+                'meta' => [
+                    'organization_id' => $organizationId,
+                ],
+            ];
+        });
     }
 
     public function x(): static

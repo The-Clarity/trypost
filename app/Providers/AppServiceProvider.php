@@ -58,7 +58,6 @@ use Laravel\Socialite\Facades\Socialite;
 use Laravel\Socialite\Two\GoogleProvider;
 use PostHog\PostHog;
 use SocialiteProviders\Facebook\FacebookExtendSocialite;
-use SocialiteProviders\LinkedIn\LinkedInExtendSocialite;
 use SocialiteProviders\Manager\SocialiteWasCalled;
 use SocialiteProviders\Pinterest\PinterestExtendSocialite;
 use SocialiteProviders\TikTok\TikTokExtendSocialite;
@@ -221,7 +220,6 @@ class AppServiceProvider extends ServiceProvider
         });
 
         Event::listen(SocialiteWasCalled::class, FacebookExtendSocialite::class);
-        Event::listen(SocialiteWasCalled::class, LinkedInExtendSocialite::class);
         Event::listen(SocialiteWasCalled::class, LinkedInPageExtendSocialite::class);
         Event::listen(SocialiteWasCalled::class, PinterestExtendSocialite::class);
         Event::listen(SocialiteWasCalled::class, TikTokExtendSocialite::class);

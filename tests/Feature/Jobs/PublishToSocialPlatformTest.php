@@ -22,7 +22,6 @@ use App\Models\User;
 use App\Models\Workspace;
 use App\Services\Social\ConnectionVerifier;
 use App\Services\Social\LinkedInPagePublisher;
-use App\Services\Social\LinkedInPublisher;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Event;
@@ -31,33 +30,58 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Queue;
 
 beforeEach(function () {
+    config(['trypost.platforms.linkedin-page.organization_id' => '123456']);
     Mail::fake();
     $this->user = User::factory()->create();
     $this->workspace = Workspace::factory()->create(['user_id' => $this->user->id]);
-    $this->socialAccount = SocialAccount::factory()->linkedin()->create([
+    $this->socialAccount = SocialAccount::factory()->linkedinPage()->create([
         'workspace_id' => $this->workspace->id,
+        'platform_user_id' => '123456',
+        'meta' => ['organization_id' => '123456'],
     ]);
     $this->post = Post::factory()->scheduled()->create([
         'workspace_id' => $this->workspace->id,
         'user_id' => $this->user->id,
     ]);
-    $this->postPlatform = PostPlatform::factory()->linkedin()->create([
+    $this->postPlatform = PostPlatform::factory()->create([
         'post_id' => $this->post->id,
         'social_account_id' => $this->socialAccount->id,
+        'platform' => Platform::LinkedInPage,
+        'content_type' => ContentType::LinkedInPagePost,
         'enabled' => true,
     ]);
+});
+
+test('legacy personal linkedin rows fail closed before publisher dispatch', function () {
+    Event::fake();
+
+    $legacyAccount = SocialAccount::factory()->linkedin()->create([
+        'workspace_id' => $this->workspace->id,
+    ]);
+    $legacyPlatform = PostPlatform::factory()->linkedin()->create([
+        'post_id' => $this->post->id,
+        'social_account_id' => $legacyAccount->id,
+        'enabled' => true,
+    ]);
+
+    (new PublishToSocialPlatform($legacyPlatform))->handle();
+
+    $legacyPlatform->refresh();
+    expect($legacyPlatform->status)->toBe(PlatformStatus::Failed);
+    expect($legacyPlatform->error_message)
+        ->toBe('Personal LinkedIn publishing is not supported. Connect the configured LinkedIn Page instead.');
 });
 
 test('publish to social platform marks platform as publishing', function () {
     Event::fake();
 
-    $publisher = Mockery::mock(LinkedInPublisher::class);
+    $publisher = Mockery::mock(LinkedInPagePublisher::class);
     $publisher->shouldReceive('publish')->andReturn([
         'id' => 'post-123',
         'url' => 'https://linkedin.com/post/123',
     ]);
 
-    $this->app->instance(LinkedInPublisher::class, $publisher);
+    $this->app->instance(LinkedInPagePublisher::class, $publisher);
 
     (new PublishToSocialPlatform($this->postPlatform))->handle();
 
@@ -67,13 +91,13 @@ test('publish to social platform marks platform as publishing', function () {
 test('publish to social platform marks platform as published on success', function () {
     Event::fake();
 
-    $publisher = Mockery::mock(LinkedInPublisher::class);
+    $publisher = Mockery::mock(LinkedInPagePublisher::class);
     $publisher->shouldReceive('publish')->andReturn([
         'id' => 'post-123',
         'url' => 'https://linkedin.com/post/123',
     ]);
 
-    $this->app->instance(LinkedInPublisher::class, $publisher);
+    $this->app->instance(LinkedInPagePublisher::class, $publisher);
 
     (new PublishToSocialPlatform($this->postPlatform))->handle();
 
@@ -87,7 +111,11 @@ test('publish job dispatches a linkedin-page post to the page publisher', functi
     Event::fake();
 
     $workspace = Workspace::factory()->create(['user_id' => $this->user->id]);
-    $pageAccount = SocialAccount::factory()->linkedinPage()->create(['workspace_id' => $workspace->id]);
+    $pageAccount = SocialAccount::factory()->linkedinPage()->create([
+        'workspace_id' => $workspace->id,
+        'platform_user_id' => '123456',
+        'meta' => ['organization_id' => '123456'],
+    ]);
     $post = Post::factory()->scheduled()->create([
         'workspace_id' => $workspace->id,
         'user_id' => $this->user->id,
@@ -118,11 +146,8 @@ test('publish job runs the real document flow end-to-end for a LinkedIn PDF post
     Event::fake();
 
     // Real publisher (no mock) — exercise the full job -> getPublisher -> publishDocument chain.
-    $this->socialAccount->update([
-        'platform_user_id' => 'person-xyz',
-        'token_expires_at' => now()->addDays(60),
-    ]);
-    $this->postPlatform->update(['content_type' => ContentType::LinkedInPost]);
+    $this->socialAccount->update(['token_expires_at' => now()->addDays(60)]);
+    $this->postPlatform->update(['content_type' => ContentType::LinkedInPagePost]);
     $this->post->update([
         'content' => 'Our deck',
         'media' => [[
@@ -172,10 +197,10 @@ test('publish job runs the real document flow end-to-end for a LinkedIn PDF post
 test('publish to social platform marks platform as failed on error', function () {
     Event::fake();
 
-    $publisher = Mockery::mock(LinkedInPublisher::class);
+    $publisher = Mockery::mock(LinkedInPagePublisher::class);
     $publisher->shouldReceive('publish')->andThrow(new Exception('API Error'));
 
-    $this->app->instance(LinkedInPublisher::class, $publisher);
+    $this->app->instance(LinkedInPagePublisher::class, $publisher);
 
     (new PublishToSocialPlatform($this->postPlatform))->handle();
 
@@ -187,13 +212,13 @@ test('publish to social platform marks platform as failed on error', function ()
 test('publish keeps the vetted user message from a publish exception', function () {
     Event::fake();
 
-    $publisher = Mockery::mock(LinkedInPublisher::class);
+    $publisher = Mockery::mock(LinkedInPagePublisher::class);
     $publisher->shouldReceive('publish')->andThrow(new LinkedInPublishException(
         userMessage: 'LinkedIn rejected this post.',
         category: ErrorCategory::ContentPolicy,
     ));
 
-    $this->app->instance(LinkedInPublisher::class, $publisher);
+    $this->app->instance(LinkedInPagePublisher::class, $publisher);
 
     (new PublishToSocialPlatform($this->postPlatform))->handle();
 
@@ -205,12 +230,12 @@ test('publish keeps the vetted user message from a publish exception', function 
 test('publish never leaks a raw internal error to the failure record (and the email)', function () {
     Event::fake();
 
-    $publisher = Mockery::mock(LinkedInPublisher::class);
+    $publisher = Mockery::mock(LinkedInPagePublisher::class);
     $publisher->shouldReceive('publish')->andThrow(new TypeError(
         'X::getMediaCategory(): Argument #1 ($mimeType) must be of type string, null given, called in /home/forge/app.trypost.it/releases/72198060/app/Services/Social/XPublisher.php on line 130'
     ));
 
-    $this->app->instance(LinkedInPublisher::class, $publisher);
+    $this->app->instance(LinkedInPagePublisher::class, $publisher);
 
     (new PublishToSocialPlatform($this->postPlatform))->handle();
 
@@ -238,10 +263,10 @@ test('publish to social platform marks account as token expired on auth failure'
     Event::fake();
     Mail::fake();
 
-    $publisher = Mockery::mock(LinkedInPublisher::class);
+    $publisher = Mockery::mock(LinkedInPagePublisher::class);
     $publisher->shouldReceive('publish')->andThrow(new TokenExpiredException('Token expired', '401'));
 
-    $this->app->instance(LinkedInPublisher::class, $publisher);
+    $this->app->instance(LinkedInPagePublisher::class, $publisher);
 
     (new PublishToSocialPlatform($this->postPlatform))->handle();
 
@@ -257,12 +282,12 @@ test('publish reschedules platform unavailable retry via Bus dispatch (not marke
     Event::fake();
     Mail::fake();
 
-    $publisher = Mockery::mock(LinkedInPublisher::class);
+    $publisher = Mockery::mock(LinkedInPagePublisher::class);
     $publisher->shouldReceive('publish')->andThrow(
         new PlatformUnavailableException('LinkedIn API returned 503 during token refresh', 503)
     );
 
-    $this->app->instance(LinkedInPublisher::class, $publisher);
+    $this->app->instance(LinkedInPagePublisher::class, $publisher);
 
     (new PublishToSocialPlatform($this->postPlatform))->handle();
 
@@ -288,7 +313,7 @@ test('publish reschedules retry when retry-refresh path hits platform unavailabl
     // Publisher first throws TokenExpired (401-style), the retry-refresh
     // path goes through ConnectionVerifier::verify which can in turn raise
     // PlatformUnavailable if the platform is down.
-    $publisher = Mockery::mock(LinkedInPublisher::class);
+    $publisher = Mockery::mock(LinkedInPagePublisher::class);
     $publisher->shouldReceive('publish')->andThrow(new TokenExpiredException('Token expired', '401'));
 
     $verifier = Mockery::mock(ConnectionVerifier::class);
@@ -296,7 +321,7 @@ test('publish reschedules retry when retry-refresh path hits platform unavailabl
         new PlatformUnavailableException('LinkedIn API returned 503 during token refresh', 503)
     );
 
-    $this->app->instance(LinkedInPublisher::class, $publisher);
+    $this->app->instance(LinkedInPagePublisher::class, $publisher);
     $this->app->instance(ConnectionVerifier::class, $verifier);
 
     (new PublishToSocialPlatform($this->postPlatform))->handle();
@@ -319,11 +344,11 @@ test('publish reschedules retry exactly 10 minutes into the future', function ()
     $now = now()->startOfMinute();
     Carbon::setTestNow($now);
 
-    $publisher = Mockery::mock(LinkedInPublisher::class);
+    $publisher = Mockery::mock(LinkedInPagePublisher::class);
     $publisher->shouldReceive('publish')->andThrow(
         new PlatformUnavailableException('LinkedIn 503', 503)
     );
-    $this->app->instance(LinkedInPublisher::class, $publisher);
+    $this->app->instance(LinkedInPagePublisher::class, $publisher);
 
     (new PublishToSocialPlatform($this->postPlatform))->handle();
 
@@ -355,11 +380,11 @@ test('publish records last_attempt_at when rescheduling for retry', function () 
     $now = now()->startOfMinute();
     Carbon::setTestNow($now);
 
-    $publisher = Mockery::mock(LinkedInPublisher::class);
+    $publisher = Mockery::mock(LinkedInPagePublisher::class);
     $publisher->shouldReceive('publish')->andThrow(
         new PlatformUnavailableException('LinkedIn 503', 503)
     );
-    $this->app->instance(LinkedInPublisher::class, $publisher);
+    $this->app->instance(LinkedInPagePublisher::class, $publisher);
 
     (new PublishToSocialPlatform($this->postPlatform))->handle();
 
@@ -390,11 +415,11 @@ test('post stays in Publishing while one platform is still Retrying', function (
     // Start the post as Publishing so updatePostStatus sees the in-flight context
     $this->post->update(['status' => PostStatus::Publishing]);
 
-    $publisher = Mockery::mock(LinkedInPublisher::class);
+    $publisher = Mockery::mock(LinkedInPagePublisher::class);
     $publisher->shouldReceive('publish')->andThrow(
         new PlatformUnavailableException('LinkedIn 503', 503)
     );
-    $this->app->instance(LinkedInPublisher::class, $publisher);
+    $this->app->instance(LinkedInPagePublisher::class, $publisher);
 
     (new PublishToSocialPlatform($this->postPlatform))->handle();
 
@@ -415,12 +440,12 @@ test('successful publish after a retry transitions the platform to Published', f
 
     Event::fake();
 
-    $publisher = Mockery::mock(LinkedInPublisher::class);
+    $publisher = Mockery::mock(LinkedInPagePublisher::class);
     $publisher->shouldReceive('publish')->andReturn([
         'id' => 'post-after-retry',
         'url' => 'https://linkedin.com/post/after-retry',
     ]);
-    $this->app->instance(LinkedInPublisher::class, $publisher);
+    $this->app->instance(LinkedInPagePublisher::class, $publisher);
 
     (new PublishToSocialPlatform($this->postPlatform))->handle();
 
@@ -435,11 +460,11 @@ test('publish retry count increments across successive platform_unavailable atte
     Event::fake();
     Mail::fake();
 
-    $publisher = Mockery::mock(LinkedInPublisher::class);
+    $publisher = Mockery::mock(LinkedInPagePublisher::class);
     $publisher->shouldReceive('publish')->andThrow(
         new PlatformUnavailableException('LinkedIn 503', 503)
     );
-    $this->app->instance(LinkedInPublisher::class, $publisher);
+    $this->app->instance(LinkedInPagePublisher::class, $publisher);
 
     // Simulate prior attempts
     $this->postPlatform->update([
@@ -456,13 +481,13 @@ test('publish retry count increments across successive platform_unavailable atte
 test('publish to social platform updates post status when all platforms finished', function () {
     Event::fake();
 
-    $publisher = Mockery::mock(LinkedInPublisher::class);
+    $publisher = Mockery::mock(LinkedInPagePublisher::class);
     $publisher->shouldReceive('publish')->andReturn([
         'id' => 'post-123',
         'url' => 'https://linkedin.com/post/123',
     ]);
 
-    $this->app->instance(LinkedInPublisher::class, $publisher);
+    $this->app->instance(LinkedInPagePublisher::class, $publisher);
 
     (new PublishToSocialPlatform($this->postPlatform))->handle();
 
@@ -483,13 +508,13 @@ test('publish to social platform marks post as partially published when some fai
         'enabled' => true,
     ]);
 
-    $publisher = Mockery::mock(LinkedInPublisher::class);
+    $publisher = Mockery::mock(LinkedInPagePublisher::class);
     $publisher->shouldReceive('publish')->andReturn([
         'id' => 'post-123',
         'url' => 'https://linkedin.com/post/123',
     ]);
 
-    $this->app->instance(LinkedInPublisher::class, $publisher);
+    $this->app->instance(LinkedInPagePublisher::class, $publisher);
 
     (new PublishToSocialPlatform($this->postPlatform))->handle();
 
@@ -500,10 +525,10 @@ test('publish to social platform marks post as partially published when some fai
 test('publish to social platform marks post as failed when all platforms fail', function () {
     Event::fake();
 
-    $publisher = Mockery::mock(LinkedInPublisher::class);
+    $publisher = Mockery::mock(LinkedInPagePublisher::class);
     $publisher->shouldReceive('publish')->andThrow(new Exception('API Error'));
 
-    $this->app->instance(LinkedInPublisher::class, $publisher);
+    $this->app->instance(LinkedInPagePublisher::class, $publisher);
 
     (new PublishToSocialPlatform($this->postPlatform))->handle();
 
@@ -519,10 +544,10 @@ test('publish to social platform skips publishing when account is disconnected',
         'disconnected_at' => now(),
     ]);
 
-    $publisher = Mockery::mock(LinkedInPublisher::class);
+    $publisher = Mockery::mock(LinkedInPagePublisher::class);
     $publisher->shouldNotReceive('publish');
 
-    $this->app->instance(LinkedInPublisher::class, $publisher);
+    $this->app->instance(LinkedInPagePublisher::class, $publisher);
 
     (new PublishToSocialPlatform($this->postPlatform))->handle();
 
@@ -539,10 +564,10 @@ test('publish to social platform skips publishing when account token is expired'
         'disconnected_at' => now(),
     ]);
 
-    $publisher = Mockery::mock(LinkedInPublisher::class);
+    $publisher = Mockery::mock(LinkedInPagePublisher::class);
     $publisher->shouldNotReceive('publish');
 
-    $this->app->instance(LinkedInPublisher::class, $publisher);
+    $this->app->instance(LinkedInPagePublisher::class, $publisher);
 
     (new PublishToSocialPlatform($this->postPlatform))->handle();
 
@@ -557,10 +582,10 @@ test('publish to social platform skips publishing when account is inactive', fun
 
     $this->socialAccount->update(['is_active' => false]);
 
-    $publisher = Mockery::mock(LinkedInPublisher::class);
+    $publisher = Mockery::mock(LinkedInPagePublisher::class);
     $publisher->shouldNotReceive('publish');
 
-    $this->app->instance(LinkedInPublisher::class, $publisher);
+    $this->app->instance(LinkedInPagePublisher::class, $publisher);
 
     (new PublishToSocialPlatform($this->postPlatform))->handle();
 
@@ -573,13 +598,13 @@ test('publish to social platform dispatches success notification when all platfo
     Event::fake();
     Queue::fake();
 
-    $publisher = Mockery::mock(LinkedInPublisher::class);
+    $publisher = Mockery::mock(LinkedInPagePublisher::class);
     $publisher->shouldReceive('publish')->andReturn([
         'id' => 'post-123',
         'url' => 'https://linkedin.com/post/123',
     ]);
 
-    $this->app->instance(LinkedInPublisher::class, $publisher);
+    $this->app->instance(LinkedInPagePublisher::class, $publisher);
 
     $this->workspace->members()->attach($this->user->id, ['role' => Role::Member->value]);
 
@@ -594,10 +619,10 @@ test('publish to social platform dispatches failure notification when platform f
     Event::fake();
     Queue::fake();
 
-    $publisher = Mockery::mock(LinkedInPublisher::class);
+    $publisher = Mockery::mock(LinkedInPagePublisher::class);
     $publisher->shouldReceive('publish')->andThrow(new Exception('API error'));
 
-    $this->app->instance(LinkedInPublisher::class, $publisher);
+    $this->app->instance(LinkedInPagePublisher::class, $publisher);
 
     $this->workspace->members()->attach($this->user->id, ['role' => Role::Member->value]);
 
@@ -612,7 +637,7 @@ test('it retries with token refresh when token expires during publish', function
     Event::fake();
 
     $callCount = 0;
-    $publisher = Mockery::mock(LinkedInPublisher::class);
+    $publisher = Mockery::mock(LinkedInPagePublisher::class);
     $publisher->shouldReceive('publish')
         ->twice()
         ->andReturnUsing(function () use (&$callCount) {
@@ -624,7 +649,7 @@ test('it retries with token refresh when token expires during publish', function
             return ['id' => 'post-123', 'url' => 'https://linkedin.com/post/123'];
         });
 
-    $this->app->instance(LinkedInPublisher::class, $publisher);
+    $this->app->instance(LinkedInPagePublisher::class, $publisher);
 
     $verifier = Mockery::mock(ConnectionVerifier::class);
     $verifier->shouldReceive('verify')->once()->andReturn(true);
@@ -643,12 +668,12 @@ test('it retries with token refresh when token expires during publish', function
 test('it marks account as token expired when refresh fails during publish retry', function () {
     Event::fake();
 
-    $publisher = Mockery::mock(LinkedInPublisher::class);
+    $publisher = Mockery::mock(LinkedInPagePublisher::class);
     $publisher->shouldReceive('publish')
         ->once()
         ->andThrow(new TokenExpiredException('Token expired', '401'));
 
-    $this->app->instance(LinkedInPublisher::class, $publisher);
+    $this->app->instance(LinkedInPagePublisher::class, $publisher);
 
     $verifier = Mockery::mock(ConnectionVerifier::class);
     $verifier->shouldReceive('verify')->once()->andThrow(new Exception('Refresh failed'));
@@ -673,10 +698,10 @@ test('publish to social platform skips if already published (idempotency)', func
         'platform_post_id' => 'existing-123',
     ]);
 
-    $publisher = Mockery::mock(LinkedInPublisher::class);
+    $publisher = Mockery::mock(LinkedInPagePublisher::class);
     $publisher->shouldNotReceive('publish');
 
-    $this->app->instance(LinkedInPublisher::class, $publisher);
+    $this->app->instance(LinkedInPagePublisher::class, $publisher);
 
     (new PublishToSocialPlatform($this->postPlatform))->handle();
 
@@ -690,10 +715,10 @@ test('publish to social platform saves error context on generic failure', functi
 
     $this->post->update(['content' => 'Test content here']);
 
-    $publisher = Mockery::mock(LinkedInPublisher::class);
+    $publisher = Mockery::mock(LinkedInPagePublisher::class);
     $publisher->shouldReceive('publish')->andThrow(new Exception('Something broke'));
 
-    $this->app->instance(LinkedInPublisher::class, $publisher);
+    $this->app->instance(LinkedInPagePublisher::class, $publisher);
 
     (new PublishToSocialPlatform($this->postPlatform))->handle();
 
@@ -710,7 +735,7 @@ test('publish to social platform saves error context on social publish exception
 
     $this->post->update(['content' => 'Hello world']);
 
-    $publisher = Mockery::mock(LinkedInPublisher::class);
+    $publisher = Mockery::mock(LinkedInPagePublisher::class);
     $publisher->shouldReceive('publish')->andThrow(
         new LinkedInPublishException(
             'Not authorized to post',
@@ -720,7 +745,7 @@ test('publish to social platform saves error context on social publish exception
         )
     );
 
-    $this->app->instance(LinkedInPublisher::class, $publisher);
+    $this->app->instance(LinkedInPagePublisher::class, $publisher);
 
     (new PublishToSocialPlatform($this->postPlatform))->handle();
 
@@ -735,7 +760,7 @@ test('publish to social platform saves error context on social publish exception
 test('publish to social platform fails when scopes are missing', function () {
     Event::fake();
 
-    $this->socialAccount->update(['scopes' => ['user.info.basic']]); // missing w_member_social
+    $this->socialAccount->update(['scopes' => ['unrelated_scope']]);
     $this->postPlatform->refresh();
 
     (new PublishToSocialPlatform($this->postPlatform))->handle();
@@ -744,17 +769,17 @@ test('publish to social platform fails when scopes are missing', function () {
     expect($this->postPlatform->status)->toBe(PlatformStatus::Failed);
     expect($this->postPlatform->error_message)->toContain('Missing permissions');
     expect($this->postPlatform->error_context['category'])->toBe('permission');
-    expect($this->postPlatform->error_context['missing_scopes'])->toContain('w_member_social');
+    expect($this->postPlatform->error_context['missing_scopes'])->toContain('w_organization_social');
 });
 
 test('publish to social platform saves error context on token expired', function () {
     Event::fake();
     Mail::fake();
 
-    $publisher = Mockery::mock(LinkedInPublisher::class);
+    $publisher = Mockery::mock(LinkedInPagePublisher::class);
     $publisher->shouldReceive('publish')->andThrow(new TokenExpiredException('Token expired', '190'));
 
-    $this->app->instance(LinkedInPublisher::class, $publisher);
+    $this->app->instance(LinkedInPagePublisher::class, $publisher);
 
     $verifier = Mockery::mock(ConnectionVerifier::class);
     $verifier->shouldReceive('verify')->andThrow(new TokenExpiredException('Refresh failed'));

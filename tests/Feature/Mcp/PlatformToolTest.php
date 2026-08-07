@@ -16,7 +16,7 @@ beforeEach(function () {
     $this->user->update(['current_workspace_id' => $this->workspace->id]);
 });
 
-test('list content types returns all platforms with constraints', function () {
+test('list content types returns supported platforms with constraints', function () {
     $response = TryPostServer::actingAs($this->user)
         ->tool(ListContentTypesTool::class, []);
 
@@ -59,12 +59,14 @@ test('list content types returns all platforms with constraints', function () {
         });
 });
 
-test('list content types includes content types per platform', function () {
+test('list content types includes page content without exposing personal linkedin', function () {
     $response = TryPostServer::actingAs($this->user)
         ->tool(ListContentTypesTool::class, []);
 
     $response->assertOk()
-        ->assertSee(['linkedin', 'linkedin_post', 'x_post', 'instagram_feed', 'mastodon_post']);
+        ->assertSee(['linkedin-page', 'linkedin_page_post', 'x_post', 'instagram_feed', 'mastodon_post'])
+        ->assertDontSee('"platform":"linkedin"')
+        ->assertDontSee('linkedin_post');
 });
 
 test('list content types exposes reel max video durations', function () {

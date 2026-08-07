@@ -20,6 +20,7 @@ class ListSocialAccountsTool extends Tool
     {
         $accounts = $request->user()->currentWorkspace
             ->socialAccounts()
+            ->available()
             ->orderBy('platform')
             ->get();
 

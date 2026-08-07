@@ -172,7 +172,7 @@ test('start dispatches StreamPostCreation and returns creation_id and channel', 
     });
 });
 
-test('start works without social_account_id', function () {
+test('start rejects compatibility-only personal LinkedIn format', function () {
     Bus::fake();
 
     $this->actingAs($this->user)
@@ -180,10 +180,25 @@ test('start works without social_account_id', function () {
             'prompt' => 'Write a LinkedIn post',
             'format' => 'linkedin_post',
         ])
+        ->assertStatus(Response::HTTP_UNPROCESSABLE_ENTITY)
+        ->assertJsonValidationErrors(['format']);
+
+    Bus::assertNotDispatched(StreamPostCreation::class);
+});
+
+test('start works for a LinkedIn Page without social_account_id', function () {
+    Bus::fake();
+
+    $this->actingAs($this->user)
+        ->postJson(route('app.posts.ai.create'), [
+            'prompt' => 'Write a LinkedIn Page post',
+            'format' => 'linkedin_page_post',
+        ])
         ->assertStatus(Response::HTTP_ACCEPTED)
         ->assertJsonStructure(['creation_id', 'channel']);
 
-    Bus::assertDispatched(StreamPostCreation::class, fn ($job) => is_null($job->socialAccountId));
+    Bus::assertDispatched(StreamPostCreation::class, fn ($job) => $job->format === 'linkedin_page_post'
+        && is_null($job->socialAccountId));
 });
 
 test('start dispatches the job carrying the date param when provided', function () {

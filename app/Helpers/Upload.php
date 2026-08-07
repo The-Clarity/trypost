@@ -11,9 +11,12 @@ if (! function_exists('uploadFromUrl')) {
     /**
      * Download an image from URL and upload to storage.
      *
+     * Remote fetch failures return null. Storage failures propagate so a
+     * broken private object-storage path is never mistaken for success.
+     *
      * @param  string|null  $url  The URL to download from
      * @param  string  $directory  The directory to store the file in
-     * @return string|null The stored file path or null on failure
+     * @return string|null The stored file path or null when the remote fetch fails
      */
     function uploadFromUrl(?string $url, string $directory = 'social-accounts'): ?string
     {
@@ -48,16 +51,18 @@ if (! function_exists('uploadFromUrl')) {
                 $extension
             );
 
-            Storage::put($filename, $response->body(), 'public');
-
-            return $filename;
+            $contents = $response->body();
         } catch (Exception $e) {
-            Log::warning('uploadFromUrl: Exception', [
+            Log::warning('uploadFromUrl: Download exception', [
                 'url' => $url,
                 'error' => $e->getMessage(),
             ]);
 
             return null;
         }
+
+        Storage::put($filename, $contents);
+
+        return $filename;
     }
 }

@@ -18,6 +18,28 @@ if [ "${TARGET}" = "production" ] && [ -z "${APP_KEY:-}" ]; then
     exit 1
 fi
 
+if [ "${TARGET}" = "production" ]; then
+    if [ "${BROADCAST_CONNECTION:-}" != "reverb" ]; then
+        echo "[entrypoint] BROADCAST_CONNECTION=reverb is required in production" >&2
+        exit 1
+    fi
+
+    if [ -z "${REVERB_APP_ID:-}" ] || [ -z "${REVERB_APP_KEY:-}" ] || \
+        [ -z "${REVERB_APP_SECRET:-}" ] || [ -z "${REVERB_HOST:-}" ] || \
+        [ -z "${REVERB_PORT:-}" ] || [ -z "${REVERB_SCHEME:-}" ]; then
+        echo "[entrypoint] all REVERB_APP_*, REVERB_HOST, REVERB_PORT, and REVERB_SCHEME values are required in production" >&2
+        exit 1
+    fi
+
+    case "${REVERB_SCHEME}" in
+        http|https) ;;
+        *)
+            echo "[entrypoint] REVERB_SCHEME must be http or https" >&2
+            exit 1
+            ;;
+    esac
+fi
+
 # 1) Bootstrap .env from the Docker template on first dev boot. The bind-mount
 #    in dev hides /var/www/html/.env.docker.example, so prefer docker/ first.
 if [ "${TRYPOST_DOCKER_BOOTSTRAP:-0}" = "1" ] && [ ! -f .env ]; then
@@ -74,14 +96,20 @@ until pg_isready -h "${DB_HOST_VALUE}" -p "${DB_PORT_VALUE}" -U "${DB_USER_VALUE
     sleep 1
 done
 
-# 7) Run migrations (graceful: succeeds even when nothing to migrate).
-echo "[entrypoint] running migrations"
-php artisan migrate --force
+# 7) A production orchestrator owns the one-shot preparation job. The bundled
+# single-node Compose stack opts in here; Kubernetes app replicas do not race
+# each other through migrations at startup.
+if [ "${TARGET}" != "production" ] || [ "${TRYPOST_RUN_PREPARE:-0}" = "1" ]; then
+    echo "[entrypoint] preparing database and Passport client"
+    composer production:prepare
+else
+    echo "[entrypoint] database preparation owned by the deployment job"
+fi
 
 # 8) storage:link if missing.
 if [ ! -L public/storage ]; then
     echo "[entrypoint] linking storage"
-    php artisan storage:link --force || true
+    php artisan storage:link --force
 fi
 
 # 9) Passport keys. Prefer PASSPORT_PRIVATE_KEY / PASSPORT_PUBLIC_KEY from
@@ -99,16 +127,14 @@ elif [ ! -f storage/oauth-private.key ] || [ ! -f storage/oauth-public.key ]; th
     php artisan passport:keys --force
 fi
 
-# 10) Personal access client for REST API keys. The seeder is idempotent, so
-# fresh self-hosted installs and existing deployments are both safe.
-echo "[entrypoint] ensuring Passport personal access client"
-php artisan db:seed --class='Database\Seeders\PassportSeeder' --force
+# 10) Dev regenerates Wayfinder helpers for the live Vite server. Production
+# already contains the generated helpers and compiled assets from asset-build.
+if [ "${TARGET}" = "dev" ]; then
+    echo "[entrypoint] regenerating wayfinder helpers"
+    php artisan wayfinder:generate --with-form
+fi
 
-# 11) Wayfinder TS regen — Vite needs the files before it boots.
-echo "[entrypoint] regenerating wayfinder helpers"
-php artisan wayfinder:generate --with-form || true
-
-# 12) Cache strategy: prod = pre-cache; dev = clear.
+# 11) Cache strategy: prod = pre-cache; dev = clear.
 if [ "${TARGET}" = "production" ]; then
     php artisan config:cache
     php artisan route:cache
@@ -121,7 +147,7 @@ else
     php artisan event:clear
 fi
 
-# 13) Permissions. Production php-fpm pool runs as www-data (Alpine default),
+# 12) Permissions. Production php-fpm pool runs as www-data (Alpine default),
 # so storage and bootstrap/cache must be writable by that user — Laravel
 # needs to write session files, view cache, log files, etc.
 if [ "${TARGET}" = "production" ]; then

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Social;
 
+use App\Enums\SocialAccount\Platform;
 use App\Models\PostPlatform;
 use App\Models\SocialAccount;
 use App\Services\Social\Concerns\HasSocialHttpClient;
@@ -31,6 +32,10 @@ class LinkedInPageAnalytics
 
     public function getMetrics(SocialAccount $account, ?CarbonInterface $since = null, ?CarbonInterface $until = null): array
     {
+        if ($account->platform !== Platform::LinkedInPage || ! $account->isAvailableForUse()) {
+            return [];
+        }
+
         $since ??= now()->subDays(7);
         $until ??= now();
 
@@ -46,7 +51,13 @@ class LinkedInPageAnalytics
     {
         $account = $postPlatform->socialAccount;
 
-        if (! $account || ! $postPlatform->platform_post_id) {
+        if (! $account
+            || $account->platform !== Platform::LinkedInPage
+            || ! $account->isAvailableForUse()) {
+            return ['unsupported' => true, 'reason' => 'account_unavailable'];
+        }
+
+        if (! $postPlatform->platform_post_id) {
             return ['unsupported' => true, 'reason' => 'missing_post_id'];
         }
 
@@ -70,11 +81,22 @@ class LinkedInPageAnalytics
         }
 
         $data = $response->json();
+        $metrics = [];
 
-        return [
-            ['label' => __('analytics.metrics.likes'), 'value' => (int) data_get($data, 'likesSummary.totalLikes', 0)],
-            ['label' => __('analytics.metrics.comments'), 'value' => (int) data_get($data, 'commentsSummary.aggregatedTotalComments', 0)],
-        ];
+        foreach ([
+            'likesSummary.totalLikes' => __('analytics.metrics.likes'),
+            'commentsSummary.aggregatedTotalComments' => __('analytics.metrics.comments'),
+        ] as $path => $label) {
+            $value = is_array($data) ? $this->observedMetricTotal([$data], $path) : null;
+
+            if ($value !== null) {
+                $metrics[] = ['label' => $label, 'value' => $value];
+            }
+        }
+
+        return $metrics !== []
+            ? $metrics
+            : ['unsupported' => true, 'reason' => 'metrics_unavailable'];
     }
 
     private function fetchMetricsFromApi(SocialAccount $account, CarbonInterface $since, CarbonInterface $until): array
@@ -124,14 +146,14 @@ class LinkedInPageAnalytics
             return [];
         }
 
-        $elements = data_get($response->json(), 'elements', []);
-        $totalPageViews = 0;
+        $totalPageViews = $this->observedMetricTotal(
+            data_get($response->json(), 'elements'),
+            'totalPageStatistics.views.allPageViews.pageViews',
+        );
 
-        foreach ($elements as $element) {
-            $totalPageViews += data_get($element, 'totalPageStatistics.views.allPageViews.pageViews', 0);
-        }
-
-        return $totalPageViews > 0 ? [['label' => __('analytics.metrics.page_views'), 'value' => $totalPageViews]] : [];
+        return $totalPageViews !== null
+            ? [['label' => __('analytics.metrics.page_views'), 'value' => $totalPageViews]]
+            : [];
     }
 
     private function fetchFollowerStatistics(string $orgUrn, string $timeInterval): array
@@ -148,23 +170,17 @@ class LinkedInPageAnalytics
             return [];
         }
 
-        $elements = data_get($response->json(), 'elements', []);
-        $organicFollowers = 0;
-        $paidFollowers = 0;
-
-        foreach ($elements as $element) {
-            $organicFollowers += data_get($element, 'followerGains.organicFollowerGain', 0);
-            $paidFollowers += data_get($element, 'followerGains.paidFollowerGain', 0);
-        }
-
         $metrics = [];
 
-        if ($organicFollowers > 0) {
-            $metrics[] = ['label' => __('analytics.metrics.organic_followers'), 'value' => $organicFollowers];
-        }
+        foreach ([
+            'followerGains.organicFollowerGain' => __('analytics.metrics.organic_followers'),
+            'followerGains.paidFollowerGain' => __('analytics.metrics.paid_followers'),
+        ] as $path => $label) {
+            $value = $this->observedMetricTotal(data_get($response->json(), 'elements'), $path);
 
-        if ($paidFollowers > 0) {
-            $metrics[] = ['label' => __('analytics.metrics.paid_followers'), 'value' => $paidFollowers];
+            if ($value !== null) {
+                $metrics[] = ['label' => $label, 'value' => $value];
+            }
         }
 
         return $metrics;
@@ -184,41 +200,48 @@ class LinkedInPageAnalytics
             return [];
         }
 
-        $elements = data_get($response->json(), 'elements', []);
-        $totalShares = 0;
-        $totalClicks = 0;
-        $totalLikes = 0;
-        $totalComments = 0;
-        $totalImpressions = 0;
-
-        foreach ($elements as $element) {
-            $stats = data_get($element, 'totalShareStatistics', []);
-            $totalShares += data_get($stats, 'shareCount', 0);
-            $totalClicks += data_get($stats, 'clickCount', 0);
-            $totalLikes += data_get($stats, 'likeCount', 0);
-            $totalComments += data_get($stats, 'commentCount', 0);
-            $totalImpressions += data_get($stats, 'impressionCount', 0);
-        }
-
         $metrics = [];
 
-        if ($totalImpressions > 0) {
-            $metrics[] = ['label' => __('analytics.metrics.impressions'), 'value' => $totalImpressions];
-        }
-        if ($totalClicks > 0) {
-            $metrics[] = ['label' => __('analytics.metrics.clicks'), 'value' => $totalClicks];
-        }
-        if ($totalLikes > 0) {
-            $metrics[] = ['label' => __('analytics.metrics.likes'), 'value' => $totalLikes];
-        }
-        if ($totalComments > 0) {
-            $metrics[] = ['label' => __('analytics.metrics.comments'), 'value' => $totalComments];
-        }
-        if ($totalShares > 0) {
-            $metrics[] = ['label' => __('analytics.metrics.shares'), 'value' => $totalShares];
+        foreach ([
+            'totalShareStatistics.impressionCount' => __('analytics.metrics.impressions'),
+            'totalShareStatistics.clickCount' => __('analytics.metrics.clicks'),
+            'totalShareStatistics.likeCount' => __('analytics.metrics.likes'),
+            'totalShareStatistics.commentCount' => __('analytics.metrics.comments'),
+            'totalShareStatistics.shareCount' => __('analytics.metrics.shares'),
+        ] as $path => $label) {
+            $value = $this->observedMetricTotal(data_get($response->json(), 'elements'), $path);
+
+            if ($value !== null) {
+                $metrics[] = ['label' => $label, 'value' => $value];
+            }
         }
 
         return $metrics;
+    }
+
+    private function observedMetricTotal(mixed $elements, string $path): ?int
+    {
+        if (! is_array($elements) || $elements === [] || ! array_is_list($elements)) {
+            return null;
+        }
+
+        $total = 0;
+
+        foreach ($elements as $element) {
+            if (! is_array($element)) {
+                return null;
+            }
+
+            $value = data_get($element, $path);
+
+            if (! is_int($value) || $value < 0 || $value > PHP_INT_MAX - $total) {
+                return null;
+            }
+
+            $total += $value;
+        }
+
+        return $total;
     }
 
     private function getHttpClient(): PendingRequest

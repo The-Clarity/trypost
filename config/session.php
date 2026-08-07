@@ -105,6 +105,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Session Blocking Cache Store
+    |--------------------------------------------------------------------------
+    |
+    | LinkedIn Page callback and selection routes serialize requests from the
+    | same browser session. Keep those locks in Redis so every web replica
+    | observes the same owner and stale session snapshots cannot race writes.
+    |
+    */
+
+    'block_store' => 'redis',
+
+    /*
+    |--------------------------------------------------------------------------
     | Session Sweeping Lottery
     |--------------------------------------------------------------------------
     |

@@ -120,18 +120,19 @@ return [
 
     'platforms' => [
         'linkedin' => [
-            'enabled' => env('LINKEDIN_ENABLED', true),
-            'api' => env('LINKEDIN_API', 'https://api.linkedin.com'),
-            // OAuth host is different from the data API (api.linkedin.com).
-            'oauth_api' => env('LINKEDIN_OAUTH_API', 'https://www.linkedin.com'),
-            // Scopes for LinkedIn authentication
-            'scopes' => array_values(array_filter(array_map('trim', explode(',', (string) env('LINKEDIN_SCOPES', 'openid,profile,email,w_member_social'))))),
+            // Compatibility tombstone for historical rows and content. There
+            // are deliberately no credentials, scopes, or usable endpoints.
+            'enabled' => false,
+            'api' => null,
+            'oauth_api' => null,
         ],
         'linkedin-page' => [
             'enabled' => env('LINKEDIN_PAGE_ENABLED', true),
+            'organization_id' => env('LINKEDIN_PAGE_ORGANIZATION_ID'),
             'api' => env('LINKEDIN_PAGE_API', 'https://api.linkedin.com'),
+            'oauth_api' => env('LINKEDIN_PAGE_OAUTH_API', 'https://www.linkedin.com'),
             // Scopes for LinkedIn Page authentication
-            'scopes' => array_values(array_filter(array_map('trim', explode(',', (string) env('LINKEDIN_PAGE_SCOPES', 'openid,profile,email,w_organization_social,r_organization_social,rw_organization_admin,w_member_social'))))),
+            'scopes' => array_values(array_filter(array_map('trim', explode(',', (string) env('LINKEDIN_PAGE_SCOPES', 'rw_organization_admin,w_organization_social,r_organization_social'))))),
         ],
         'x' => [
             'enabled' => env('X_ENABLED', true),

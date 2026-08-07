@@ -25,9 +25,8 @@ beforeEach(function () {
     $this->workspace->members()->attach($this->user->id, ['role' => Role::Member->value]);
     $this->user->update(['current_workspace_id' => $this->workspace->id]);
 
-    $this->socialAccount = SocialAccount::factory()->create([
+    $this->socialAccount = SocialAccount::factory()->linkedinPage()->create([
         'workspace_id' => $this->workspace->id,
-        'platform' => Platform::LinkedIn,
     ]);
 });
 
@@ -453,7 +452,7 @@ test('update post saves changes', function () {
         'platforms' => [
             [
                 'id' => $postPlatform->id,
-                'content_type' => ContentType::LinkedInPost->value,
+                'content_type' => ContentType::LinkedInPagePost->value,
             ],
         ],
     ]);
@@ -463,7 +462,7 @@ test('update post saves changes', function () {
     $post->refresh();
     expect($post->content)->toBe('Updated content');
     $postPlatform->refresh();
-    expect($postPlatform->content_type)->toBe(ContentType::LinkedInPost);
+    expect($postPlatform->content_type)->toBe(ContentType::LinkedInPagePost);
 });
 
 test('update post cannot update published posts', function () {
@@ -484,7 +483,7 @@ test('update post cannot update published posts', function () {
         'platforms' => [
             [
                 'id' => $postPlatform->id,
-                'content_type' => ContentType::LinkedInPost->value,
+                'content_type' => ContentType::LinkedInPagePost->value,
             ],
         ],
     ]);
@@ -512,7 +511,7 @@ test('cannot re-publish a failed post', function () {
         'platforms' => [
             [
                 'id' => $postPlatform->id,
-                'content_type' => ContentType::LinkedInPost->value,
+                'content_type' => ContentType::LinkedInPagePost->value,
             ],
         ],
     ]);
@@ -545,7 +544,7 @@ test('cannot update a post in publishing state', function () {
         'platforms' => [
             [
                 'id' => $postPlatform->id,
-                'content_type' => ContentType::LinkedInPost->value,
+                'content_type' => ContentType::LinkedInPagePost->value,
             ],
         ],
     ]);
@@ -578,7 +577,7 @@ test('cannot update a partially published post', function () {
         'platforms' => [
             [
                 'id' => $postPlatform->id,
-                'content_type' => ContentType::LinkedInPost->value,
+                'content_type' => ContentType::LinkedInPagePost->value,
             ],
         ],
     ]);
@@ -611,7 +610,7 @@ test('cannot update a published post', function () {
         'platforms' => [
             [
                 'id' => $postPlatform->id,
-                'content_type' => ContentType::LinkedInPost->value,
+                'content_type' => ContentType::LinkedInPagePost->value,
             ],
         ],
     ]);
@@ -647,7 +646,7 @@ test('publish now updates scheduled_at to current time', function () {
         'platforms' => [
             [
                 'id' => $postPlatform->id,
-                'content_type' => ContentType::LinkedInPost->value,
+                'content_type' => ContentType::LinkedInPagePost->value,
             ],
         ],
     ]);
@@ -681,7 +680,7 @@ test('publish now is allowed when the draft has no scheduled_at', function () {
         'platforms' => [
             [
                 'id' => $postPlatform->id,
-                'content_type' => ContentType::LinkedInPost->value,
+                'content_type' => ContentType::LinkedInPagePost->value,
             ],
         ],
     ])->assertRedirect();
@@ -712,7 +711,7 @@ test('update rejects scheduled status without a future scheduled_at', function (
         'platforms' => [
             [
                 'id' => $postPlatform->id,
-                'content_type' => ContentType::LinkedInPost->value,
+                'content_type' => ContentType::LinkedInPagePost->value,
             ],
         ],
     ];
@@ -756,7 +755,7 @@ test('update accepts scheduled status reusing an existing future scheduled_at', 
         'platforms' => [
             [
                 'id' => $postPlatform->id,
-                'content_type' => ContentType::LinkedInPost->value,
+                'content_type' => ContentType::LinkedInPagePost->value,
             ],
         ],
     ])->assertRedirect();
@@ -789,7 +788,7 @@ test('update schedules an unscheduled draft with an explicit future scheduled_at
         'platforms' => [
             [
                 'id' => $postPlatform->id,
-                'content_type' => ContentType::LinkedInPost->value,
+                'content_type' => ContentType::LinkedInPagePost->value,
             ],
         ],
     ])->assertRedirect();
@@ -819,7 +818,7 @@ test('update keeps an unscheduled draft when saving as draft without scheduled_a
         'platforms' => [
             [
                 'id' => $postPlatform->id,
-                'content_type' => ContentType::LinkedInPost->value,
+                'content_type' => ContentType::LinkedInPagePost->value,
             ],
         ],
     ])->assertRedirect();
@@ -943,7 +942,7 @@ test('update post can attach labels', function () {
         'platforms' => [
             [
                 'id' => $postPlatform->id,
-                'content_type' => ContentType::LinkedInPost->value,
+                'content_type' => ContentType::LinkedInPagePost->value,
             ],
         ],
         'label_ids' => [$label->id],
@@ -979,7 +978,7 @@ test('update post can detach labels', function () {
         'platforms' => [
             [
                 'id' => $postPlatform->id,
-                'content_type' => ContentType::LinkedInPost->value,
+                'content_type' => ContentType::LinkedInPagePost->value,
             ],
         ],
         'label_ids' => [],
@@ -1016,7 +1015,7 @@ test('update post can sync multiple labels', function () {
         'platforms' => [
             [
                 'id' => $postPlatform->id,
-                'content_type' => ContentType::LinkedInPost->value,
+                'content_type' => ContentType::LinkedInPagePost->value,
             ],
         ],
         'label_ids' => [$label2->id, $label3->id],
@@ -1220,7 +1219,7 @@ test('update post redirects to show page after publishing', function () {
         'status' => 'publishing',
         'content' => 'Test',
         'platforms' => [
-            ['id' => $postPlatform->id, 'content_type' => ContentType::LinkedInPost->value],
+            ['id' => $postPlatform->id, 'content_type' => ContentType::LinkedInPagePost->value],
         ],
     ]);
 
@@ -1449,7 +1448,7 @@ test('update post validates label_ids exist', function () {
         'platforms' => [
             [
                 'id' => $postPlatform->id,
-                'content_type' => ContentType::LinkedInPost->value,
+                'content_type' => ContentType::LinkedInPagePost->value,
             ],
         ],
         'label_ids' => ['non-existent-uuid'],

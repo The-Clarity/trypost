@@ -14,6 +14,11 @@ use App\Services\Social\XPublisher;
 use Illuminate\Support\Facades\Http;
 
 beforeEach(function () {
+    config([
+        'services.x.client_id' => 'test-x-client-id',
+        'services.x.client_secret' => 'test-x-client-secret',
+    ]);
+
     $this->workspace = Workspace::factory()->create();
     $this->socialAccount = SocialAccount::factory()->create([
         'workspace_id' => $this->workspace->id,

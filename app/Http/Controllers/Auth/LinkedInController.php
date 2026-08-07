@@ -4,17 +4,17 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Auth;
 
-use App\Enums\SocialAccount\LinkedInIdentityType;
 use App\Enums\SocialAccount\Platform as SocialPlatform;
 use App\Enums\SocialAccount\Status;
 use App\Exceptions\SocialAccount\NetworkAlreadyConnectedException;
+use App\Models\SocialAccount;
 use App\Models\Workspace;
-use Illuminate\Http\RedirectResponse;
+use App\Services\Social\LinkedInPageOAuthAttempts;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Validation\Rules\Enum;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response as InertiaResponse;
 use Laravel\Socialite\Facades\Socialite;
@@ -22,45 +22,46 @@ use Symfony\Component\HttpFoundation\Response;
 
 class LinkedInController extends SocialController
 {
-    protected string $driver = 'linkedin-openid';
+    protected SocialPlatform $platform = SocialPlatform::LinkedInPage;
 
-    protected SocialPlatform $platform = SocialPlatform::LinkedIn;
+    public function __construct(private readonly LinkedInPageOAuthAttempts $oauthAttempts) {}
 
-    /**
-     * The LinkedIn card stands for both the personal profile and company-page
-     * capabilities, each independently toggleable so self-hosters can run with
-     * just one. The connect flow is available while either is enabled.
-     */
-    protected function ensurePlatformEnabled(): void
+    public function connectPage(Request $request): Response
     {
-        if (! $this->personEnabled() && ! $this->organizationEnabled()) {
-            abort(Response::HTTP_FORBIDDEN, 'This platform is currently unavailable.');
+        if (! $this->pageConnectionConfigured()) {
+            abort(Response::HTTP_FORBIDDEN, 'LinkedIn Page is currently unavailable.');
         }
-    }
-
-    public function connect(Request $request): Response
-    {
-        $this->ensurePlatformEnabled();
 
         $workspace = $request->user()->currentWorkspace;
 
         $this->authorize('manageAccounts', $workspace);
 
-        session(['social_connect_workspace' => $workspace->id]);
+        $state = $this->oauthAttempts->issue(
+            $request,
+            LinkedInPageOAuthAttempts::PHASE_OAUTH,
+            $workspace->id,
+        );
 
         return Inertia::location(
-            Socialite::driver($this->driver)
-                ->scopes($this->connectScopes())
+            Socialite::driver('linkedin-page')
+                ->stateless()
+                ->setScopes(config('trypost.platforms.linkedin-page.scopes'))
+                ->with(['state' => $state])
                 ->redirect()
                 ->getTargetUrl()
         );
     }
 
-    public function callback(Request $request): InertiaResponse|RedirectResponse
+    public function callback(Request $request): InertiaResponse
     {
-        $workspaceId = session('social_connect_workspace');
+        $attempt = $this->oauthAttempts->consume(
+            $request,
+            LinkedInPageOAuthAttempts::PHASE_OAUTH,
+            $request->query('state'),
+        );
+        $workspaceId = data_get($attempt, 'workspace_id');
 
-        if (! $workspaceId) {
+        if (! is_string($workspaceId) || ! $this->pageConnectionConfigured()) {
             return $this->popupCallback(false, __('accounts.popup_callback.session_expired'), $this->platform->value);
         }
 
@@ -71,28 +72,28 @@ class LinkedInController extends SocialController
         }
 
         try {
-            $socialUser = Socialite::driver($this->driver)->user();
+            $socialUser = Socialite::driver('linkedin-page')->stateless()->user();
+            $pending = [
+                'workspace_id' => $workspace->id,
+                'token' => $socialUser->token,
+                'refresh_token' => $socialUser->refreshToken,
+                'expires_in' => $socialUser->expiresIn,
+                'approved_scopes' => $socialUser->approvedScopes ?? [],
+                'organizations' => $this->fetchConfiguredOrganization($socialUser->token),
+            ];
+            $selectionAttempt = $this->oauthAttempts->issue(
+                $request,
+                LinkedInPageOAuthAttempts::PHASE_SELECTION,
+                $workspace->id,
+                $pending,
+            );
 
-            session([
-                'linkedin_pending' => [
-                    'workspace_id' => $workspace->id,
-                    'token' => $socialUser->token,
-                    'refresh_token' => $socialUser->refreshToken,
-                    'expires_in' => $socialUser->expiresIn,
-                    'approved_scopes' => $socialUser->approvedScopes ?? [],
-                    'person' => [
-                        'id' => $socialUser->getId(),
-                        'name' => $socialUser->getName(),
-                        'avatar' => $socialUser->getAvatar(),
-                        'vanity_name' => $this->personEnabled() ? $this->fetchVanityName($socialUser->token) : null,
-                    ],
-                    'organizations' => $this->organizationEnabled() ? $this->fetchOrganizations($socialUser->token) : [],
-                ],
+            return Inertia::render('accounts/LinkedInSelect', [
+                'attempt' => $selectionAttempt,
+                'organizations' => $pending['organizations'],
             ]);
-
-            return redirect()->route('app.social.linkedin.select-identity');
         } catch (\Exception $e) {
-            Log::error('LinkedIn OAuth Error', [
+            Log::error('LinkedIn Page OAuth error', [
                 'error' => $e->getMessage(),
             ]);
 
@@ -100,31 +101,25 @@ class LinkedInController extends SocialController
         }
     }
 
-    public function selectIdentity(Request $request): InertiaResponse
+    public function select(Request $request): InertiaResponse
     {
-        $pending = session('linkedin_pending');
+        $attempt = $this->oauthAttempts->consume(
+            $request,
+            LinkedInPageOAuthAttempts::PHASE_SELECTION,
+            $request->input('attempt'),
+        );
+        $workspaceId = data_get($attempt, 'workspace_id');
+        $pending = data_get($attempt, 'payload');
 
-        if (! $pending) {
+        if (! is_string($workspaceId)
+            || ! is_array($pending)
+            || ! hash_equals($workspaceId, (string) data_get($pending, 'workspace_id'))) {
             return $this->popupCallback(false, __('accounts.popup_callback.session_expired'), $this->platform->value);
         }
 
-        $workspace = Workspace::find($pending['workspace_id']);
-
-        if (! $workspace || ! $request->user()->can('manageAccounts', $workspace)) {
-            return $this->popupCallback(false, __('accounts.popup_callback.workspace_not_found'), $this->platform->value);
-        }
-
-        return Inertia::render('accounts/LinkedInSelect', [
-            'person' => $this->personEnabled() ? $pending['person'] : null,
-            'organizations' => $pending['organizations'],
-        ]);
-    }
-
-    public function select(Request $request): InertiaResponse
-    {
         $validator = Validator::make($request->all(), [
-            'type' => ['required', new Enum(LinkedInIdentityType::class)],
-            'organization_id' => 'required_if:type,organization',
+            'type' => ['required', Rule::in(['organization'])],
+            'organization_id' => ['required'],
         ]);
 
         if ($validator->fails()) {
@@ -132,78 +127,38 @@ class LinkedInController extends SocialController
         }
 
         $validated = $validator->validated();
-
-        $pending = session('linkedin_pending');
-
-        if (! $pending) {
-            return $this->popupCallback(false, __('accounts.popup_callback.session_expired'), $this->platform->value);
-        }
-
-        $workspace = Workspace::find($pending['workspace_id']);
+        $workspace = Workspace::find($workspaceId);
 
         if (! $workspace || ! $request->user()->can('manageAccounts', $workspace)) {
             return $this->popupCallback(false, __('accounts.popup_callback.workspace_not_found'), $this->platform->value);
         }
 
-        $type = LinkedInIdentityType::from(data_get($validated, 'type'));
+        if (! $this->pageConnectionConfigured()) {
+            return $this->popupCallback(false, __('accounts.popup_callback.error_connecting'), $this->platform->value);
+        }
 
-        if (($type === LinkedInIdentityType::Organization && ! $this->organizationEnabled())
-            || ($type === LinkedInIdentityType::Person && ! $this->personEnabled())) {
+        $organization = $this->resolveConfiguredAdministeredOrganization(
+            $pending,
+            data_get($validated, 'organization_id'),
+        );
+
+        if (! $organization) {
             return $this->popupCallback(false, __('accounts.popup_callback.error_connecting'), $this->platform->value);
         }
 
         try {
-            if ($type === LinkedInIdentityType::Organization) {
-                $organization = $this->resolveAdministeredOrganization($pending, data_get($validated, 'organization_id'));
-
-                if (! $organization) {
-                    return $this->popupCallback(false, __('accounts.popup_callback.error_connecting'), $this->platform->value);
-                }
-
-                $this->connectOrganization($workspace, $pending, $organization);
-            } else {
-                $this->connectPerson($workspace, $pending);
-            }
-
-            session()->forget('linkedin_pending');
+            $this->connectOrganization($workspace, $pending, $organization);
 
             return $this->popupCallback(true, __('accounts.popup_callback.connected'), $this->platform->value);
         } catch (NetworkAlreadyConnectedException) {
             return $this->popupCallback(false, __('accounts.popup_callback.network_taken'), $this->platform->value);
         } catch (\Exception $e) {
-            Log::error('LinkedIn selection error', [
+            Log::error('LinkedIn Page selection error', [
                 'error' => $e->getMessage(),
             ]);
 
             return $this->popupCallback(false, __('accounts.popup_callback.error_connecting'), $this->platform->value);
         }
-    }
-
-    /**
-     * The user's personal LinkedIn profile becomes a `linkedin` account.
-     */
-    private function connectPerson(Workspace $workspace, array $pending): void
-    {
-        $person = $pending['person'];
-
-        $workspace->socialAccounts()->updateOrCreate(
-            [
-                'platform' => SocialPlatform::LinkedIn->value,
-                'platform_user_id' => data_get($person, 'id'),
-            ],
-            [
-                'username' => data_get($person, 'vanity_name'),
-                'display_name' => data_get($person, 'name'),
-                'avatar_url' => uploadFromUrl(data_get($person, 'avatar')),
-                'access_token' => $pending['token'],
-                'refresh_token' => $pending['refresh_token'],
-                'token_expires_at' => $pending['expires_in'] ? now()->addSeconds($pending['expires_in']) : null,
-                'scopes' => $this->normalizeScopes($pending['approved_scopes'] ?? []),
-                'status' => Status::Connected,
-                'error_message' => null,
-                'disconnected_at' => null,
-            ],
-        );
     }
 
     /**
@@ -214,24 +169,38 @@ class LinkedInController extends SocialController
      * @param  array<string, mixed>  $pending
      * @return array<string, mixed>|null
      */
-    private function resolveAdministeredOrganization(array $pending, mixed $organizationId): ?array
+    private function resolveConfiguredAdministeredOrganization(array $pending, mixed $organizationId): ?array
     {
+        $configuredOrganizationId = SocialAccount::configuredLinkedInPageOrganizationId();
+
+        if ($configuredOrganizationId === null
+            || ! hash_equals($configuredOrganizationId, (string) $organizationId)) {
+            return null;
+        }
+
         return collect(data_get($pending, 'organizations', []))
-            ->first(fn ($organization) => (string) data_get($organization, 'id') === (string) $organizationId);
+            ->first(fn ($organization) => hash_equals(
+                $configuredOrganizationId,
+                (string) data_get($organization, 'id'),
+            ));
     }
 
     /**
-     * A company the user administers becomes a `linkedin-page` account, with the
-     * acting member recorded in meta so the page publisher can post on its behalf.
-     * The organization data comes from the admin-verified session list, never the
-     * request body.
+     * The configured company becomes a `linkedin-page` account. The organization
+     * data comes from the ACL-verified session list, never the request body; the
+     * acting member's personal identity is neither requested nor persisted.
      *
      * @param  array<string, mixed>  $pending
      * @param  array<string, mixed>  $organization
      */
     private function connectOrganization(Workspace $workspace, array $pending, array $organization): void
     {
-        $organizationId = data_get($organization, 'id');
+        $organizationId = (string) data_get($organization, 'id');
+        $configuredOrganizationId = SocialAccount::configuredLinkedInPageOrganizationId();
+
+        if ($configuredOrganizationId === null || ! hash_equals($configuredOrganizationId, $organizationId)) {
+            throw new \LogicException('Attempted to connect an unauthorized LinkedIn Page organization.');
+        }
 
         $workspace->socialAccounts()->updateOrCreate(
             [
@@ -251,43 +220,9 @@ class LinkedInController extends SocialController
                 'disconnected_at' => null,
                 'meta' => [
                     'organization_id' => $organizationId,
-                    'admin_user_id' => data_get($pending, 'person.id'),
-                    'admin_name' => data_get($pending, 'person.name'),
                 ],
             ],
         );
-    }
-
-    /**
-     * Union of the scopes for the enabled capabilities, so one consent screen
-     * grants exactly what the workspace can use — member posting, company-page
-     * administration, or both — and the user picks the identity afterwards.
-     *
-     * @return array<int, string>
-     */
-    private function connectScopes(): array
-    {
-        $scopes = [];
-
-        if ($this->personEnabled()) {
-            $scopes = array_merge($scopes, config('trypost.platforms.linkedin.scopes'));
-        }
-
-        if ($this->organizationEnabled()) {
-            $scopes = array_merge($scopes, config('trypost.platforms.linkedin-page.scopes'));
-        }
-
-        return array_values(array_unique($scopes));
-    }
-
-    private function personEnabled(): bool
-    {
-        return SocialPlatform::LinkedIn->isEnabled();
-    }
-
-    private function organizationEnabled(): bool
-    {
-        return SocialPlatform::LinkedInPage->isEnabled();
     }
 
     /**
@@ -300,48 +235,35 @@ class LinkedInController extends SocialController
      */
     private function normalizeScopes(array $approvedScopes): array
     {
-        return array_values(array_filter(explode(',', implode(',', $approvedScopes))));
-    }
-
-    private function fetchVanityName(string $accessToken): ?string
-    {
-        try {
-            $response = Http::withToken($accessToken)
-                ->withHeaders(['X-RestLi-Protocol-Version' => '2.0.0'])
-                ->get(config('trypost.platforms.linkedin.api').'/v2/me', [
-                    'projection' => '(id,vanityName,localizedFirstName,localizedLastName)',
-                ]);
-
-            if ($response->successful()) {
-                return $response->json('vanityName');
-            }
-        } catch (\Exception $e) {
-            Log::warning('Failed to fetch LinkedIn vanityName', [
-                'error' => $e->getMessage(),
-            ]);
-        }
-
-        return null;
+        return array_values(array_unique(array_filter(explode(',', implode(',', $approvedScopes)))));
     }
 
     /**
-     * Organizations the authenticated member administers, used to offer company
-     * pages as a posting identity alongside their personal profile.
+     * Return the configured Clarity organization only when the authenticated
+     * member administers it. Other administered Pages are never selectable.
      *
      * @return array<int, array{id: mixed, name: string, vanity_name: ?string, logo: ?string}>
      */
-    private function fetchOrganizations(string $accessToken): array
+    private function fetchConfiguredOrganization(string $accessToken): array
     {
+        $configuredOrganizationId = SocialAccount::configuredLinkedInPageOrganizationId();
+
+        if ($configuredOrganizationId === null) {
+            return [];
+        }
+
         $response = Http::withToken($accessToken)
-            ->get(config('trypost.platforms.linkedin.api').'/v2/organizationAcls', [
+            ->connectTimeout(5)
+            ->timeout(10)
+            ->get(config('trypost.platforms.linkedin-page.api').'/v2/organizationAcls', [
                 'q' => 'roleAssignee',
                 'role' => 'ADMINISTRATOR',
                 'projection' => '(elements*(organization~(id,localizedName,vanityName,logoV2(original~:playableStreams))))',
             ]);
 
         if ($response->failed()) {
-            Log::error('LinkedIn Organizations fetch error', [
-                'error' => $response->body(),
+            Log::error('LinkedIn Page organizations fetch error', [
+                'status' => $response->status(),
             ]);
 
             return [];
@@ -352,7 +274,7 @@ class LinkedInController extends SocialController
         foreach (data_get($response->json(), 'elements', []) as $element) {
             $org = data_get($element, 'organization~');
 
-            if ($org) {
+            if ($org && hash_equals($configuredOrganizationId, (string) data_get($org, 'id'))) {
                 $organizations[] = [
                     'id' => data_get($org, 'id'),
                     'name' => data_get($org, 'localizedName', 'Unknown'),
@@ -363,5 +285,11 @@ class LinkedInController extends SocialController
         }
 
         return $organizations;
+    }
+
+    private function pageConnectionConfigured(): bool
+    {
+        return $this->platform->isEnabled()
+            && SocialAccount::configuredLinkedInPageOrganizationId() !== null;
     }
 }

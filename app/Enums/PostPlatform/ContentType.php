@@ -541,7 +541,6 @@ enum ContentType: string
         return [
             self::InstagramFeed,
             self::InstagramStory,
-            self::LinkedInPost,
             self::LinkedInPagePost,
             self::XPost,
             self::ThreadsPost,

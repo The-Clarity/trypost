@@ -46,6 +46,10 @@ class UpdatePostTool extends Tool
         }
 
         $status = data_get($request->all(), 'status');
+        $availablePlatformIds = $post->postPlatforms()
+            ->whereHas('socialAccount', fn ($query) => $query->active())
+            ->pluck('id')
+            ->all();
 
         $validated = $request->validate(
             [
@@ -59,7 +63,7 @@ class UpdatePostTool extends Tool
                 'platforms.*.id' => [
                     'required',
                     'uuid',
-                    Rule::exists('post_platforms', 'id')->where('post_id', $post->id),
+                    Rule::in($availablePlatformIds),
                 ],
                 'platforms.*.content_type' => [
                     'sometimes',

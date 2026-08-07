@@ -11,18 +11,21 @@ use App\Models\PostPlatform;
 use App\Models\SocialAccount;
 use App\Models\User;
 use App\Models\Workspace;
-use App\Services\Social\LinkedInPublisher;
+use App\Services\Social\LinkedInPagePublisher;
 use Illuminate\Support\Facades\Http;
 
 beforeEach(function () {
+    config(['trypost.platforms.linkedin-page.organization_id' => '123456']);
+
     $this->user = User::factory()->create();
     $this->workspace = Workspace::factory()->create(['user_id' => $this->user->id]);
 
-    $this->socialAccount = SocialAccount::factory()->linkedin()->create([
+    $this->socialAccount = SocialAccount::factory()->linkedinPage()->create([
         'workspace_id' => $this->workspace->id,
-        'platform_user_id' => 'abc123xyz',
+        'platform_user_id' => '123456',
         'username' => 'johndoe',
         'token_expires_at' => now()->addDays(60),
+        'meta' => ['organization_id' => '123456'],
     ]);
 
     $this->post = Post::factory()->create([
@@ -34,16 +37,16 @@ beforeEach(function () {
     $this->postPlatform = PostPlatform::factory()->create([
         'post_id' => $this->post->id,
         'social_account_id' => $this->socialAccount->id,
-        'platform' => Platform::LinkedIn,
-        'content_type' => ContentType::LinkedInPost,
+        'platform' => Platform::LinkedInPage,
+        'content_type' => ContentType::LinkedInPagePost,
     ]);
 
-    $this->publisher = new LinkedInPublisher;
+    $this->publisher = new LinkedInPagePublisher;
 });
 
 test('linkedin publisher can publish text-only post', function () {
     Http::fake([
-        config('trypost.platforms.linkedin.api').'/rest/posts' => Http::response(null, 201, [
+        config('trypost.platforms.linkedin-page.api').'/rest/posts' => Http::response(null, 201, [
             'x-restli-id' => 'urn:li:share:1234567890',
         ]),
     ]);
@@ -53,11 +56,11 @@ test('linkedin publisher can publish text-only post', function () {
     expect($result)->toHaveKey('id');
     expect($result)->toHaveKey('url');
     expect($result['id'])->toBe('urn:li:share:1234567890');
-    expect($result['url'])->toContain('linkedin.com/feed/update/urn:li:share:1234567890');
+    expect($result['url'])->toBe('https://www.linkedin.com/company/johndoe/posts/');
 
     Http::assertSent(function ($request) {
         return str_contains($request->url(), '/rest/posts')
-            && $request['author'] === 'urn:li:person:abc123xyz'
+            && $request['author'] === 'urn:li:organization:123456'
             && $request['commentary'] === 'Hello from LinkedIn!'
             && $request['visibility'] === 'PUBLIC';
     });
@@ -65,7 +68,7 @@ test('linkedin publisher can publish text-only post', function () {
 
 test('linkedin publisher uses correct headers', function () {
     Http::fake([
-        config('trypost.platforms.linkedin.api').'/rest/posts' => Http::response(null, 201, [
+        config('trypost.platforms.linkedin-page.api').'/rest/posts' => Http::response(null, 201, [
             'x-restli-id' => 'urn:li:share:1234567890',
         ]),
     ]);
@@ -82,7 +85,7 @@ test('linkedin publisher uses correct headers', function () {
 
 test('linkedin publisher throws exception on api error', function () {
     Http::fake([
-        config('trypost.platforms.linkedin.api').'/rest/posts' => Http::response([
+        config('trypost.platforms.linkedin-page.api').'/rest/posts' => Http::response([
             'message' => 'Invalid request',
             'status' => 400,
         ], 400),
@@ -94,11 +97,11 @@ test('linkedin publisher throws exception on api error', function () {
 
 test('linkedin publisher throws token expired exception on auth error after retry', function () {
     Http::fake([
-        config('trypost.platforms.linkedin.api').'/rest/posts' => Http::response([
+        config('trypost.platforms.linkedin-page.api').'/rest/posts' => Http::response([
             'code' => 'EXPIRED_ACCESS_TOKEN',
             'message' => 'The token used in the request has expired',
         ], 401),
-        config('trypost.platforms.linkedin.oauth_api').'/oauth/v2/accessToken' => Http::response([
+        config('trypost.platforms.linkedin-page.oauth_api').'/oauth/v2/accessToken' => Http::response([
             'error' => 'invalid_grant',
             'error_description' => 'The refresh token is invalid',
         ], 400),
@@ -112,12 +115,12 @@ test('linkedin publisher refreshes token when expired', function () {
     $this->socialAccount->update(['token_expires_at' => now()->subHour()]);
 
     Http::fake([
-        config('trypost.platforms.linkedin.oauth_api').'/oauth/v2/accessToken' => Http::response([
+        config('trypost.platforms.linkedin-page.oauth_api').'/oauth/v2/accessToken' => Http::response([
             'access_token' => 'new-access-token',
             'refresh_token' => 'new-refresh-token',
             'expires_in' => 5184000,
         ], 200),
-        config('trypost.platforms.linkedin.api').'/rest/posts' => Http::response(null, 201, [
+        config('trypost.platforms.linkedin-page.api').'/rest/posts' => Http::response(null, 201, [
             'x-restli-id' => 'urn:li:share:1234567890',
         ]),
     ]);
@@ -139,14 +142,14 @@ test('linkedin publisher throws exception when no refresh token available', func
     ]);
 
     expect(fn () => $this->publisher->publish($this->postPlatform))
-        ->toThrow(TokenExpiredException::class, 'No refresh token available for LinkedIn account');
+        ->toThrow(TokenExpiredException::class, 'No refresh token available for LinkedIn Page account');
 });
 
 test('linkedin publisher throws TokenExpiredException when refresh_token is rejected', function () {
     $this->socialAccount->update(['token_expires_at' => now()->subHour()]);
 
     Http::fake([
-        config('trypost.platforms.linkedin.oauth_api').'/oauth/v2/accessToken' => Http::response([
+        config('trypost.platforms.linkedin-page.oauth_api').'/oauth/v2/accessToken' => Http::response([
             'error' => 'invalid_grant',
             'error_description' => 'The refresh token is invalid',
         ], 400),
@@ -160,7 +163,7 @@ test('linkedin publisher handles empty content', function () {
     $this->post->update(['content' => '']);
 
     Http::fake([
-        config('trypost.platforms.linkedin.api').'/rest/posts' => Http::response(null, 201, [
+        config('trypost.platforms.linkedin-page.api').'/rest/posts' => Http::response(null, 201, [
             'x-restli-id' => 'urn:li:share:1234567890',
         ]),
     ]);
@@ -216,7 +219,7 @@ test('linkedin publisher can publish post with image', function () {
     $result = $this->publisher->publish($this->postPlatform);
 
     expect($result['id'])->toBe('urn:li:share:9876543210');
-    expect($result['url'])->toContain('linkedin.com/feed/update/urn:li:share:9876543210');
+    expect($result['url'])->toBe('https://www.linkedin.com/company/johndoe/posts/');
 
     Http::assertSent(fn ($request) => str_contains($request->url(), '/rest/images'));
     Http::assertSent(fn ($request) => str_contains($request->url(), '/rest/posts')
@@ -384,7 +387,7 @@ test('linkedin publisher truncates single image alt text to the platform max len
 });
 
 test('linkedin publisher can publish carousel with multiple images', function () {
-    $this->postPlatform->update(['content_type' => ContentType::LinkedInPost]);
+    $this->postPlatform->update(['content_type' => ContentType::LinkedInPagePost]);
     $this->post->update([
         'media' => [
             [
@@ -458,7 +461,7 @@ test('linkedin publisher can publish carousel with multiple images', function ()
     $result = $this->publisher->publish($this->postPlatform);
 
     expect($result['id'])->toBe('urn:li:share:carousel999');
-    expect($result['url'])->toContain('linkedin.com/feed/update/urn:li:share:carousel999');
+    expect($result['url'])->toBe('https://www.linkedin.com/company/johndoe/posts/');
 
     // Each multiImage entry must carry the image URN under `id` (LinkedIn rejects `media`).
     Http::assertSent(function ($request) {
@@ -475,7 +478,7 @@ test('linkedin publisher can publish carousel with multiple images', function ()
 });
 
 test('linkedin publisher sends per-image alt text on a carousel, not the filename', function () {
-    $this->postPlatform->update(['content_type' => ContentType::LinkedInPost]);
+    $this->postPlatform->update(['content_type' => ContentType::LinkedInPagePost]);
     $this->post->update([
         'media' => [
             [
@@ -808,7 +811,7 @@ test('linkedin publisher uploads a video across multiple chunks', function () {
 
 test('linkedin publisher can publish a document (pdf carousel) with a title', function () {
     $this->postPlatform->update([
-        'content_type' => ContentType::LinkedInPost,
+        'content_type' => ContentType::LinkedInPagePost,
         'meta' => ['document_title' => 'My Slides'],
     ]);
     $this->post->update([
@@ -855,7 +858,7 @@ test('linkedin publisher can publish a document (pdf carousel) with a title', fu
     $result = $this->publisher->publish($this->postPlatform);
 
     expect($result['id'])->toBe('urn:li:share:doc999');
-    expect($result['url'])->toContain('linkedin.com/feed/update/urn:li:share:doc999');
+    expect($result['url'])->toBe('https://www.linkedin.com/company/johndoe/posts/');
 
     Http::assertSent(fn ($request) => str_contains($request->url(), '/rest/documents') && str_contains($request->url(), 'initializeUpload'));
     Http::assertSent(function ($request) use ($uploadUrl) {
@@ -873,7 +876,7 @@ test('linkedin publisher can publish a document (pdf carousel) with a title', fu
 });
 
 test('linkedin publisher document title falls back to the file name', function () {
-    $this->postPlatform->update(['content_type' => ContentType::LinkedInPost]);
+    $this->postPlatform->update(['content_type' => ContentType::LinkedInPagePost]);
     $this->post->update([
         'media' => [
             [
@@ -922,7 +925,7 @@ test('linkedin publisher document title falls back to the file name', function (
 });
 
 test('linkedin publisher waits for document processing before posting', function () {
-    $this->postPlatform->update(['content_type' => ContentType::LinkedInPost]);
+    $this->postPlatform->update(['content_type' => ContentType::LinkedInPagePost]);
     $this->post->update([
         'media' => [
             [
@@ -965,7 +968,7 @@ test('linkedin publisher waits for document processing before posting', function
 });
 
 test('linkedin publisher throws and does not post when document processing fails', function () {
-    $this->postPlatform->update(['content_type' => ContentType::LinkedInPost]);
+    $this->postPlatform->update(['content_type' => ContentType::LinkedInPagePost]);
     $this->post->update([
         'media' => [
             [
@@ -999,13 +1002,13 @@ test('linkedin publisher throws and does not post when document processing fails
     });
 
     expect(fn () => $this->publisher->publish($this->postPlatform))
-        ->toThrow(Exception::class, 'LinkedIn document processing failed');
+        ->toThrow(Exception::class, 'LinkedIn Page document processing failed');
 
     Http::assertNotSent(fn ($request) => str_contains($request->url(), '/rest/posts'));
 });
 
 test('linkedin publisher throws and does not post when document processing never completes', function () {
-    $this->postPlatform->update(['content_type' => ContentType::LinkedInPost]);
+    $this->postPlatform->update(['content_type' => ContentType::LinkedInPagePost]);
     $this->post->update([
         'media' => [[
             'id' => 'doc-media-1', 'path' => 'media/2026-01/deck.pdf',
@@ -1034,7 +1037,7 @@ test('linkedin publisher throws and does not post when document processing never
         return Http::response('fake-pdf-bytes', 200);
     });
 
-    $publisher = new class extends LinkedInPublisher
+    $publisher = new class extends LinkedInPagePublisher
     {
         protected function processingMaxAttempts(): int
         {
@@ -1054,7 +1057,7 @@ test('linkedin publisher throws and does not post when document processing never
 });
 
 test('linkedin publisher throws and does not post when document init fails', function () {
-    $this->postPlatform->update(['content_type' => ContentType::LinkedInPost]);
+    $this->postPlatform->update(['content_type' => ContentType::LinkedInPagePost]);
     $this->post->update([
         'media' => [[
             'id' => 'doc-media-1', 'path' => 'media/2026-01/deck.pdf',
@@ -1077,7 +1080,7 @@ test('linkedin publisher throws and does not post when document init fails', fun
 });
 
 test('linkedin publisher throws when document init response is missing the urn', function () {
-    $this->postPlatform->update(['content_type' => ContentType::LinkedInPost]);
+    $this->postPlatform->update(['content_type' => ContentType::LinkedInPagePost]);
     $this->post->update([
         'media' => [[
             'id' => 'doc-media-1', 'path' => 'media/2026-01/deck.pdf',
@@ -1102,7 +1105,7 @@ test('linkedin publisher throws when document init response is missing the urn',
 
 test('linkedin publisher treats a 401 response without an error code as a token error', function () {
     Http::fake([
-        config('trypost.platforms.linkedin.api').'/rest/posts' => Http::response(['message' => 'Unauthorized'], 401),
+        config('trypost.platforms.linkedin-page.api').'/rest/posts' => Http::response(['message' => 'Unauthorized'], 401),
     ]);
 
     expect(fn () => $this->publisher->publish($this->postPlatform))
@@ -1117,12 +1120,12 @@ test('linkedin publisher does NOT rotate the token when it is only expiring soon
     $originalAccessToken = $this->socialAccount->access_token;
 
     Http::fake([
-        config('trypost.platforms.linkedin.oauth_api').'/oauth/v2/accessToken' => Http::response([
+        config('trypost.platforms.linkedin-page.oauth_api').'/oauth/v2/accessToken' => Http::response([
             'access_token' => 'new-access-token',
             'refresh_token' => 'new-refresh-token',
             'expires_in' => 3600,
         ], 200),
-        config('trypost.platforms.linkedin.api').'/rest/posts' => Http::response(null, 201, ['x-restli-id' => 'urn:li:share:soon']),
+        config('trypost.platforms.linkedin-page.api').'/rest/posts' => Http::response(null, 201, ['x-restli-id' => 'urn:li:share:soon']),
     ]);
 
     $result = $this->publisher->publish($this->postPlatform);
@@ -1137,7 +1140,7 @@ test('linkedin publisher does NOT rotate the token when it is only expiring soon
 
 test('linkedin publisher falls back to an empty id and null url when the post id header is missing', function () {
     Http::fake([
-        config('trypost.platforms.linkedin.api').'/rest/posts' => Http::response(null, 201),
+        config('trypost.platforms.linkedin-page.api').'/rest/posts' => Http::response(null, 201),
     ]);
 
     $result = $this->publisher->publish($this->postPlatform);

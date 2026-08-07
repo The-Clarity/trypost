@@ -1,5 +1,4 @@
 import '../css/app.css';
-import './echo';
 
 import { createInertiaApp, router } from '@inertiajs/vue3';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
@@ -9,6 +8,7 @@ import { createApp, h } from 'vue';
 
 import { initializeDataLayer } from './datalayer';
 import dayjs from './dayjs';
+import { configureRuntimeEcho, type BroadcastingConfig } from './echo';
 import { syncContentTypeMediaRules } from './lib/contentTypeMediaRules';
 import { capturePageview, initializePostHog, syncPostHogContext } from './posthog';
 import type { Auth } from './types';
@@ -23,6 +23,8 @@ createInertiaApp({
             import.meta.glob<DefineComponent>('./pages/**/*.vue'),
         ),
     setup({ el, App, props, plugin }) {
+        configureRuntimeEcho(props.initialPage.props.broadcasting as BroadcastingConfig);
+
         // Get locale from shared Inertia props
         const locale = (props.initialPage.props as { locale?: string })?.locale || 'en';
 
